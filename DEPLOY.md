@@ -72,14 +72,23 @@ php artisan route:cache
 chmod -R 775 storage bootstrap/cache
 ```
 
-## Step 9: Setup Apache/Nginx di cPanel
-1. cPanel → Domains / Addon Domains
-2. Document Root: `/home/hank7435/balaraja/backend/public`
+## Step 9: Setup Domain di cPanel
+1. cPanel → Domains → Create a New Domain
+2. Domain: `balaraja.handispramudio.my.id`
+3. Document Root: `/home/hank7435/public_html/balaraja.handispramudio.my.id`
 
-Atau gunakan `.htaccess` yang sudah ada di Laravel.
+## Step 10: Install SSL
+1. cPanel → SSL/TLS → Let's Encrypt
+2. Pilih domain: `balaraja.handispramudio.my.id`
+3. Install
+4. Setelah SSL aktif, update `.env`:
+   ```
+   APP_URL=https://balaraja.handispramudio.my.id
+   ```
+5. Jalankan lagi: `php artisan config:cache`
 
 ## Login
-- URL: `http://202.10.43.184`
+- URL: `https://balaraja.handispramudio.my.id`
 - Email: `admin@balaraja.com`
 - Password: `password`
 

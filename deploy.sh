@@ -89,7 +89,7 @@ if command -v apache2 &> /dev/null; then
     echo "Apache detected. Creating virtual host..."
     sudo tee /etc/apache2/sites-available/balaraja.conf > /dev/null <<EOF
 <VirtualHost *:80>
-    ServerName 202.10.43.184
+    ServerName balaraja.handispramudio.my.id
     DocumentRoot $APP_DIR/backend/public
 
     <Directory $APP_DIR/backend/public>
@@ -109,7 +109,7 @@ elif command -v nginx &> /dev/null; then
     sudo tee /etc/nginx/sites-available/balaraja > /dev/null <<EOF
 server {
     listen 80;
-    server_name 202.10.43.184;
+    server_name balaraja.handispramudio.my.id;
     root $APP_DIR/backend/public;
     index index.php;
 
@@ -137,7 +137,7 @@ echo "============================================"
 echo "  DEPLOYMENT SELESAI!"
 echo "============================================"
 echo ""
-echo "  Aplikasi: http://202.10.43.184"
+echo "  Aplikasi: http://balaraja.handispramudio.my.id"
 echo "  Login: admin@balaraja.com / password"
 echo ""
 echo "============================================"
