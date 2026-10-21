@@ -20,8 +20,10 @@ git push -u origin main
 
 ## Step 3: SSH ke Server
 ```bash
-ssh -p 2223 hank7435@202.10.43.184
+ssh -p <PORT_SSH> <USER_SSH>@<HOST_SERVER>
 ```
+Kredensial SSH tidak ditulis di sini: isi lewat environment variable atau
+password manager. Jangan pernah commit host/user/password produksi.
 
 ## Step 4: Install Node.js (jika belum ada)
 ```bash
@@ -31,7 +33,7 @@ sudo apt-get install -y nodejs
 
 ## Step 5: Clone & Setup
 ```bash
-cd /home/hank7435
+cd /home/<USER_SSH>
 git clone https://github.com/YOUR_USERNAME/balaraja.git
 cd balaraja/backend
 composer install --no-dev --optimize-autoloader
@@ -59,7 +61,7 @@ DB_PASSWORD=password_dari_cpanel
 
 ## Step 8: Build Frontend & Deploy
 ```bash
-cd /home/hank7435/balaraja/frontend
+cd /home/<USER_SSH>/balaraja/frontend
 npm install
 npm run build
 cp -r dist/* ../backend/public/
@@ -75,7 +77,7 @@ chmod -R 775 storage bootstrap/cache
 ## Step 9: Setup Domain di cPanel
 1. cPanel → Domains → Create a New Domain
 2. Domain: `balaraja.handispramudio.my.id`
-3. Document Root: `/home/hank7435/public_html/balaraja.handispramudio.my.id`
+3. Document Root: `/home/<USER_SSH>/public_html/balaraja.handispramudio.my.id`
 
 ## Step 10: Install SSL
 1. cPanel → SSL/TLS → Let's Encrypt
@@ -89,13 +91,13 @@ chmod -R 775 storage bootstrap/cache
 
 ## Login
 - URL: `https://balaraja.handispramudio.my.id`
-- Email: `admin@balaraja.com`
-- Password: `password`
+- Akun admin dibuat lewat seeder; password default WAJIB diganti setelah
+  login pertama. Kredensial nyata tidak ditulis di repo ini.
 
 ## Update Deployment
 ```bash
-ssh -p 2223 hank7435@202.10.43.184
-cd /home/hank7435/balaraja
+ssh -p <PORT_SSH> <USER_SSH>@<HOST_SERVER>
+cd /home/<USER_SSH>/balaraja
 git pull origin main
 cd backend
 composer install --no-dev --optimize-autoloader

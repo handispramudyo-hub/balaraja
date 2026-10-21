@@ -28,3 +28,21 @@ backend/bootstrap/cache/*
 
 # Frontend
 frontend/.env.local
+
+# Root-level ops scripts: deploy/verify/backup, memuat password produksi
+# dan token audit. Hanya di root; .py/.mjs di subfolder tetap terpantau.
+/*.py
+/*.mjs
+__pycache__/
+
+# Arsip script ops (berisi credential, jangan pernah ter-commit)
+/ops-archive.zip
+
+# Script deploy ad-hoc root yang memuat password/host produksi.
+/deploy_combined.php
+/*.sh
+
+# Artefak tooling AI + aset root yang sudah punya salinan di frontend/public.
+/google_stitch_prompt.md
+/skills-lock.json
+/bj.png
