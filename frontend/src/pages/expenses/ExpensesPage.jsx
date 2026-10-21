@@ -3,22 +3,20 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { formatCurrency, formatDate } from '../../utils/format';
 import api from '../../services/api';
 import { toast } from 'sonner';
-import {
-  Receipt,
-  Plus,
-  Edit2,
-  Trash2,
-  X,
-  Calendar,
-  Filter,
-  Tag,
-} from 'lucide-react';
+import { LoadingState, ErrorState, EmptyState } from '../../components/ui/States';
+import Modal from '../../components/ui/Modal';
 
 const kategoriOptions = [
-  { value: 'transportasi', label: 'Transportasi' },
-  { value: 'ongkos_kirim', label: 'Ongkos Kirim' },
-  { value: 'operasional', label: 'Operasional' },
+  { value: 'transportasi', label: 'Transportasi', icon: 'local_shipping' },
+  { value: 'ongkos_kirim', label: 'Ongkos Kirim', icon: 'local_post_office' },
+  { value: 'operasional', label: 'Operasional', icon: 'settings' },
 ];
+
+const kategoriColors = {
+  transportasi: 'bg-primary-container text-on-primary-container',
+  ongkos_kirim: 'bg-secondary-container text-on-secondary-container',
+  operasional: 'bg-surface-container-high text-on-surface-variant',
+};
 
 export default function ExpensesPage() {
   const queryClient = useQueryClient();
@@ -35,13 +33,13 @@ export default function ExpensesPage() {
   const emptyForm = {
     date: new Date().toISOString().split('T')[0],
     category: '',
-    amount: 0,
+    amount: '',
     description: '',
   };
 
   const [form, setForm] = useState(emptyForm);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['expenses', filters],
     queryFn: async () => {
       const params = {};
@@ -54,6 +52,7 @@ export default function ExpensesPage() {
   });
 
   const expenses = data?.data || data || [];
+  const hasFilter = !!(filters.start_date || filters.end_date || filters.category);
 
   const createMutation = useMutation({
     mutationFn: async (data) => {
@@ -114,7 +113,7 @@ export default function ExpensesPage() {
     setForm({
       date: item.date?.split('T')[0] || item.date,
       category: item.category,
-      amount: item.amount,
+      amount: String(item.amount ?? ''),
       description: item.description,
     });
     setShowForm(true);
@@ -126,73 +125,63 @@ export default function ExpensesPage() {
       toast.error('Pilih kategori terlebih dahulu');
       return;
     }
-    if (form.amount <= 0) {
+    const amt = Number(form.amount) || 0;
+    if (amt <= 0) {
       toast.error('Nominal harus lebih dari 0');
       return;
     }
+    const payload = { ...form, amount: amt };
     if (editItem) {
-      updateMutation.mutate({ id: editItem.id, data: form });
+      updateMutation.mutate({ id: editItem.id, data: payload });
     } else {
-      createMutation.mutate(form);
+      createMutation.mutate(payload);
     }
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Biaya</h1>
-          <p className="text-gray-500">Daftar pengeluaran biaya</p>
-        </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Tambah Biaya
-        </button>
+    <main className="px-4 py-6 max-w-4xl mx-auto space-y-4">
+      <div className="mb-6">
+        <h2 className="text-lg font-semibold text-primary">Biaya</h2>
+        <p className="text-sm text-on-surface-variant mt-1">Daftar pengeluaran biaya</p>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-xl shadow p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Filter className="w-4 h-4 text-gray-500" />
-          <span className="text-sm font-semibold text-gray-700">Filter</span>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="bg-surface-container-lowest p-3 rounded-xl shadow-sm border border-outline-variant/30 flex flex-col gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Tanggal Mulai</label>
+            <label className="block text-xs font-medium text-on-surface-variant mb-1.5" htmlFor="tanggal-mulai-1">Tanggal Mulai</label>
             <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-lg">calendar_today</span>
               <input
+                id="tanggal-mulai-1"
                 type="date"
                 value={filters.start_date}
                 onChange={(e) => setFilters((f) => ({ ...f, start_date: e.target.value }))}
-                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full h-10 pl-11 pr-3 bg-surface text-on-surface rounded-xl border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm transition"
               />
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Tanggal Akhir</label>
+            <label className="block text-xs font-medium text-on-surface-variant mb-1.5" htmlFor="tanggal-akhir-2">Tanggal Akhir</label>
             <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-lg">calendar_today</span>
               <input
+                id="tanggal-akhir-2"
                 type="date"
                 value={filters.end_date}
                 onChange={(e) => setFilters((f) => ({ ...f, end_date: e.target.value }))}
-                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full h-10 pl-11 pr-3 bg-surface text-on-surface rounded-xl border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm transition"
               />
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Kategori</label>
+            <label className="block text-xs font-medium text-on-surface-variant mb-1.5" htmlFor="kategori-3">Kategori</label>
             <div className="relative">
-              <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-lg">label</span>
               <select
+                id="kategori-3"
                 value={filters.category}
                 onChange={(e) => setFilters((f) => ({ ...f, category: e.target.value }))}
-                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
+                className="w-full h-10 pl-11 pr-3 bg-surface text-on-surface rounded-xl border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm transition appearance-none"
               >
                 <option value="">Semua Kategori</option>
                 {kategoriOptions.map((k) => (
@@ -204,177 +193,179 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl shadow overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">No</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">Tanggal</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">Kategori</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">Keterangan</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">Nominal</th>
-                <th className="px-4 py-3 text-center font-semibold text-gray-600">Aksi</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {isLoading ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-gray-500">Memuat data...</td>
-                </tr>
-              ) : expenses.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-gray-500">Tidak ada data biaya</td>
-                </tr>
-              ) : (
-                expenses.map((item, idx) => (
-                  <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 text-gray-700">{idx + 1}</td>
-                    <td className="px-4 py-3 text-gray-600">{formatDate(item.date)}</td>
-                    <td className="px-4 py-3">
-                      <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700 capitalize">
-                        {item.category?.replace('_', ' ')}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">{item.description || '-'}</td>
-                    <td className="px-4 py-3 text-right font-medium text-gray-800">{formatCurrency(item.amount)}</td>
-                    <td className="px-4 py-3 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          onClick={() => openEdit(item)}
-                          className="p-1.5 rounded hover:bg-blue-50 text-blue-600 hover:text-blue-700 transition-colors"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => setDeleteConfirm(item)}
-                          className="p-1.5 rounded hover:bg-red-50 text-red-500 hover:text-red-600 transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+      <div className="space-y-3">
+        {isLoading ? (
+          <div className="bg-surface rounded-xl p-6 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.06)] border border-surface-container-high">
+            <LoadingState rows={3} />
+          </div>
+        ) : isError ? (
+          <ErrorState error={error} onRetry={() => refetch()} title="Gagal memuat data biaya" />
+        ) : expenses.length === 0 ? (
+          <EmptyState
+            icon="receipt_long"
+            title={hasFilter ? 'Tidak ada biaya yang cocok' : 'Belum ada biaya tercatat'}
+            description={
+              hasFilter
+                ? 'Coba ubah atau kosongkan filter tanggal dan kategori.'
+                : 'Catat pengeluaran seperti	ongkos kirim atau biaya operasional di sini.'
+            }
+          />
+        ) : (
+          expenses.map((item) => (
+            <div key={item.id} className="bg-surface rounded-xl p-4 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.06)] border border-surface-container-high flex gap-4 items-center">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${kategoriColors[item.category] || 'bg-surface-container-high text-on-surface-variant'}`}>
+                    <span className="material-symbols-outlined text-[14px]">
+                      {kategoriOptions.find(k => k.value === item.category)?.icon || 'label'}
+                    </span>
+                    {item.category?.replace('_', ' ')}
+                  </span>
+                  <span className="text-xs text-outline">{formatDate(item.date)}</span>
+                </div>
+                <p className="text-sm text-on-surface-variant truncate">{item.description || '-'}</p>
+                <p className="text-base font-semibold text-on-surface mt-1">{formatCurrency(item.amount)}</p>
+              </div>
+              <div className="flex flex-col gap-2 shrink-0">
+                <button
+                  onClick={() => openEdit(item)}
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-outline hover:bg-surface-variant hover:text-primary transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[20px]">edit</span>
+                </button>
+                <button
+                  onClick={() => setDeleteConfirm(item)}
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-outline hover:bg-error-container hover:text-error transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[20px]">delete</span>
+                </button>
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
-      {/* Create/Edit Form Modal */}
+      <button
+        onClick={openCreate}
+        className="fixed bottom-24 right-4 md:bottom-8 md:right-8 w-14 h-14 bg-primary text-on-primary rounded-2xl shadow-[0_8px_12px_-4px_rgba(0,0,0,0.1)] flex items-center justify-center hover:scale-105 active:scale-95 transition-all z-40"
+      >
+        <span className="material-symbols-outlined text-[28px]">add</span>
+      </button>
+
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => { setShowForm(false); setEditItem(null); }}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-5 border-b border-gray-200">
-              <h3 className="text-lg font-bold text-gray-900">{editItem ? 'Edit Biaya' : 'Tambah Biaya'}</h3>
-              <button onClick={() => { setShowForm(false); setEditItem(null); }} className="p-1 rounded hover:bg-gray-100">
-                <X className="w-5 h-5 text-gray-500" />
+        <Modal onClose={() => { setShowForm(false); setEditItem(null); }} title="Form biaya" variant="sheet" zIndex={60} panelClassName="bg-surface w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[85vh]" initialFocus='input, select, textarea'>
+            <div className="flex items-center justify-between px-6 pt-6 pb-2">
+              <h3 className="text-on-surface text-lg font-semibold">{editItem ? 'Edit Biaya' : 'Tambah Biaya'}</h3>
+              <button onClick={() => { setShowForm(false); setEditItem(null); }} className="p-2 rounded-xl text-outline hover:bg-surface-container-high transition-colors">
+                <span className="material-symbols-outlined">close</span>
               </button>
             </div>
-            <form onSubmit={handleSubmit} className="p-5 space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Tanggal</label>
-                <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1 overflow-hidden">
+              <div className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-on-surface-variant mb-1.5" htmlFor="tanggal-4">Tanggal</label>
+                  <div className="relative">
+                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-lg">calendar_today</span>
+                    <input
+                      id="tanggal-4"
+                      type="date"
+                      value={form.date}
+                      onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+                      className="w-full h-12 pl-11 pr-3 bg-surface text-on-surface rounded-xl border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm transition"
+                      required
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-on-surface-variant mb-1.5" htmlFor="kategori-5">Kategori</label>
+                  <select
+                    id="kategori-5"
+                    value={form.category}
+                    onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+                    className="w-full h-12 px-4 bg-surface text-on-surface rounded-xl border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm transition appearance-none"
+                    required
+                  >
+                    <option value="">Pilih Kategori</option>
+                    {kategoriOptions.map((k) => (
+                      <option key={k.value} value={k.value}>{k.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-on-surface-variant mb-1.5" htmlFor="nominal-6">Nominal (Rp)</label>
                   <input
-                    type="date"
-                    value={form.date}
-                    onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
-                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    id="nominal-6"
+                    type="number"
+                    min="1"
+                    value={form.amount}
+                    onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+                    className="w-full h-12 px-4 bg-surface text-on-surface placeholder-outline rounded-xl border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm transition"
                     required
                   />
                 </div>
+                <div>
+                  <label className="block text-xs font-medium text-on-surface-variant mb-1.5" htmlFor="keterangan-7">Keterangan</label>
+                  <textarea
+                    id="keterangan-7"
+                    value={form.description}
+                    onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                    className="w-full px-4 py-3 bg-surface text-on-surface placeholder-outline rounded-xl border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm transition resize-none"
+                    rows={3}
+                    placeholder="Keterangan biaya..."
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Kategori</label>
-                <select
-                  value={form.category}
-                  onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
-                  required
-                >
-                  <option value="">Pilih Kategori</option>
-                  {kategoriOptions.map((k) => (
-                    <option key={k.value} value={k.value}>{k.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Nominal</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={form.amount}
-                  onChange={(e) => setForm((f) => ({ ...f, amount: Number(e.target.value) }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Keterangan</label>
-                <textarea
-                  value={form.description}
-                  onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                  rows={3}
-                  placeholder="Keterangan biaya..."
-                />
-              </div>
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => { setShowForm(false); setEditItem(null); }}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={createMutation.isPending || updateMutation.isPending}
-                  className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow transition-colors"
-                >
-                  <Receipt className="w-4 h-4" />
-                  {(createMutation.isPending || updateMutation.isPending) ? 'Menyimpan...' : 'Simpan'}
-                </button>
-              </div>
+              <div className="shrink-0 bg-surface border-t border-outline-variant/30 px-6 py-3 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => { setShowForm(false); setEditItem(null); }}
+                className="h-10 px-5 text-sm font-medium text-primary bg-transparent hover:bg-primary/10 rounded-xl transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                disabled={createMutation.isPending || updateMutation.isPending}
+                className="h-10 px-5 text-sm font-medium text-on-primary bg-primary hover:bg-primary/90 rounded-xl transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                <span className="material-symbols-outlined text-base">receipt</span>
+                {(createMutation.isPending || updateMutation.isPending) ? 'Menyimpan...' : 'Simpan'}
+              </button>
+            </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
 
-      {/* Delete Confirmation Modal */}
       {deleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setDeleteConfirm(null)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
-            <div className="p-6 text-center">
-              <div className="mx-auto w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-4">
-                <Trash2 className="w-6 h-6 text-red-600" />
-              </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Hapus Biaya?</h3>
-              <p className="text-sm text-gray-500 mb-6">
-                Anda yakin ingin menghapus biaya <strong>{formatCurrency(deleteConfirm.amount)}</strong> pada {formatDate(deleteConfirm.date)}?
-              </p>
-              <div className="flex justify-center gap-3">
-                <button
-                  onClick={() => setDeleteConfirm(null)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
-                >
-                  Batal
-                </button>
-                <button
-                  onClick={() => deleteMutation.mutate(deleteConfirm.id)}
-                  disabled={deleteMutation.isPending}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-300 text-white rounded-lg text-sm font-semibold transition-colors"
-                >
-                  {deleteMutation.isPending ? 'Menghapus...' : 'Hapus'}
-                </button>
+        <Modal onClose={() => setDeleteConfirm(null)} title="Konfirmasi hapus biaya" variant="sheet" zIndex={60} panelClassName="bg-surface w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[85vh]">
+            <div className="overflow-y-auto flex-1 pb-20">
+              <div className="p-6 text-center">
+                <div className="mx-auto w-12 h-12 rounded-full bg-error-container flex items-center justify-center mb-4">
+                  <span className="material-symbols-outlined text-2xl text-on-error-container">delete</span>
+                </div>
+                <h3 className="text-on-surface text-lg font-semibold mb-2">Hapus Biaya?</h3>
+                <p className="text-sm text-on-surface-variant mb-6">
+                  Anda yakin ingin menghapus biaya <strong>{formatCurrency(deleteConfirm.amount)}</strong> pada {formatDate(deleteConfirm.date)}?
+                </p>
               </div>
             </div>
-          </div>
-        </div>
+            <div className="sticky bottom-0 bg-surface border-t border-outline-variant/30 px-6 py-3 flex justify-center gap-3">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="h-10 px-5 text-sm font-medium text-primary bg-transparent hover:bg-primary/10 rounded-xl transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                onClick={() => deleteMutation.mutate(deleteConfirm.id)}
+                disabled={deleteMutation.isPending}
+                className="h-10 px-5 text-sm font-medium text-on-error bg-error hover:bg-error/90 rounded-xl transition-colors disabled:opacity-50"
+              >
+                {deleteMutation.isPending ? 'Menghapus...' : 'Hapus'}
+              </button>
+            </div>
+        </Modal>
       )}
-    </div>
+    </main>
   );
 }

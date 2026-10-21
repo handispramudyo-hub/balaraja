@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../services/api';
 import { formatCurrency, formatDate } from '../../utils/format';
-import { Calculator, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Printer, Receipt } from 'lucide-react';
+import PrintHeader from '../../components/ui/PrintHeader';
+import PrintFooter from '../../components/ui/PrintFooter';
 
 export default function ProfitLossReport() {
   const today = new Date();
@@ -13,8 +14,8 @@ export default function ProfitLossReport() {
   const [endDate, setEndDate] = useState(todayStr);
   const [submitted, setSubmitted] = useState(false);
 
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: ['profit-loss-report', startDate, endDate],
+  const { data, isLoading, isError, error, refetch } = useQuery({
+    queryKey: ['profit-loss', startDate, endDate],
     queryFn: async () => {
       const res = await api.get('/reports/profit-loss', { params: { start_date: startDate, end_date: endDate } });
       return res.data;
@@ -31,7 +32,7 @@ export default function ProfitLossReport() {
   const omzet = d.omzet || 0;
   const modal = d.modal || d.total_modal || 0;
   const labaKotor = d.laba_kotor || (omzet - modal);
-  const biaya = d.biaya || {};
+  const biaya = d.expenses || d.biaya || {};
   const transportasi = biaya.transportasi || 0;
   const ongkos_kirim = biaya.ongkos_kirim || biaya.ongkir || 0;
   const operasional = biaya.operasional || 0;
@@ -41,147 +42,168 @@ export default function ProfitLossReport() {
 
   return (
     <>
-      <style>{`
-        @media print {
-          body * { visibility: hidden; }
-          .print-area, .print-area * { visibility: visible; }
-          .print-area { position: absolute; left: 0; top: 0; width: 100%; }
-          .no-print { display: none !important; }
-        }
-      `}</style>
-
-      <div className="space-y-6">
-        <div className="flex items-center justify-between no-print">
+      <main className="flex-grow px-4 py-6 overflow-y-auto print-area">
+        <div className="mb-6 flex justify-between items-end">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Laporan Laba Rugi</h1>
-            <p className="text-gray-500 text-sm">Cetak laporan laba dan rugi usaha</p>
+            <h2 className="text-xl font-semibold text-on-surface mb-1">Laporan Laba Rugi</h2>
+            <p className="text-sm text-on-surface-variant">Cetak laporan laba dan rugi usaha</p>
           </div>
           {submitted && !isLoading && (
             <button
               onClick={() => window.print()}
-              className="flex items-center gap-2 px-5 py-2 bg-blue-900 text-white rounded-lg text-sm font-semibold hover:bg-blue-800 transition"
+              className="no-print bg-primary text-on-primary h-10 px-4 rounded-lg text-xs font-medium flex items-center gap-2 active:scale-95 transition-transform shadow-sm"
             >
-              <Printer className="w-4 h-4" />
-              Cetak
+              <span className="material-symbols-outlined text-[18px]">print</span> Cetak
             </button>
           )}
         </div>
 
-        <div className="bg-white rounded-xl shadow p-4 no-print">
-          <div className="flex flex-wrap items-end gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tanggal Mulai</label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tanggal Akhir</label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-              />
-            </div>
-            <button
-              onClick={handleHitung}
-              className="flex items-center gap-2 px-5 py-2 bg-blue-900 text-white rounded-lg text-sm font-semibold hover:bg-blue-800 transition"
-            >
-              <Calculator className="w-4 h-4" />
-              Hitung
-            </button>
+        <section className="no-print bg-surface-container-lowest rounded-xl p-4 mb-6 shadow-sm border border-outline-variant/30 flex flex-col gap-4">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-on-surface-variant" htmlFor="tanggal-awal-1">Tanggal Awal</label>
+            <input
+              id="tanggal-awal-1"
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="w-full h-12 bg-surface rounded-lg border border-outline-variant px-3 text-sm text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors"
+            />
           </div>
-        </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-on-surface-variant" htmlFor="tanggal-akhir-2">Tanggal Akhir</label>
+            <input
+              id="tanggal-akhir-2"
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="w-full h-12 bg-surface rounded-lg border border-outline-variant px-3 text-sm text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors"
+            />
+          </div>
+          <button
+            onClick={handleHitung}
+            className="w-full bg-primary text-on-primary h-12 rounded-lg text-sm font-medium flex items-center justify-center gap-2 active:scale-95 transition-all shadow-sm hover:bg-primary-fixed-dim"
+          >
+            <span className="material-symbols-outlined text-[18px]">calculate</span>
+            Hitung
+          </button>
+        </section>
 
-        {isLoading && (
-          <div className="flex items-center justify-center h-40">
-            <p className="text-gray-500">Menghitung laporan...</p>
+        {isError && (
+          <div className="bg-error-container text-on-error-container border border-outline-variant/30 rounded-xl p-8 text-center">
+            <span className="material-symbols-outlined text-[40px] block mb-2">cloud_off</span>
+            <p className="text-sm font-medium mb-1">Gagal memuat laporan laba rugi</p>
+            <p className="text-xs opacity-80 mb-4">
+              {error?.response?.data?.message || error?.message || 'Terjadi kesalahan saat mengambil data.'}
+            </p>
+            <button
+              onClick={() => refetch()}
+              className="bg-primary text-on-primary px-5 py-2 rounded-lg text-xs font-medium"
+            >
+              Coba Lagi
+            </button>
           </div>
         )}
 
-        {!isLoading && submitted && (
+        {!isError && isLoading && (
+          <div className="flex items-center justify-center h-40">
+            <p className="text-on-surface-variant">Menghitung laporan...</p>
+          </div>
+        )}
+
+        {!isError && !isLoading && submitted && (
           <div className="print-area">
-            <div className="bg-white rounded-xl shadow overflow-hidden">
-              <div className="bg-blue-900 text-white px-6 py-5 text-center">
+            <PrintHeader
+              title="Laporan Laba Rugi"
+              subtitle="Rekapitulasi pendapatan, modal, dan biaya usaha"
+              period={`${formatDate(startDate)} s/d ${formatDate(endDate)}`}
+              summary={[
+                { label: 'Omzet', value: formatCurrency(omzet) },
+                { label: 'Laba Kotor', value: formatCurrency(labaKotor) },
+                { label: 'Laba Bersih', value: formatCurrency(labaBersih) },
+              ]}
+            />
+            <div className="bg-surface rounded-xl shadow-sm border border-outline-variant/30 overflow-hidden">
+              <div className="no-print bg-primary text-on-primary px-6 py-5 text-center">
                 <h2 className="text-lg font-bold tracking-wide">LAPORAN LABA RUGI</h2>
-                <p className="text-blue-200 text-sm mt-1">BALARAJA</p>
-                <p className="text-blue-200 text-sm">Periode: {formatDate(startDate)} s/d {formatDate(endDate)}</p>
+                <p className="text-on-primary/70 text-sm mt-1">BALARAJA</p>
+                <p className="text-on-primary/70 text-sm">Periode: {formatDate(startDate)} s/d {formatDate(endDate)}</p>
               </div>
 
-              <div className="px-6 py-6 space-y-6 max-w-2xl mx-auto">
-                <div className="flex justify-between items-center py-3 border-b border-gray-200">
-                  <span className="text-gray-700 font-medium">OMZET</span>
-                  <span className="text-lg font-bold text-blue-900">{formatCurrency(omzet)}</span>
+              <div className="py-2 space-y-6">
+                <div className="flex justify-between items-center py-3 border-b border-outline-variant">
+                  <span className="text-on-surface-variant font-medium">OMZET</span>
+                  <span className="text-lg font-bold text-primary">{formatCurrency(omzet)}</span>
                 </div>
 
-                <div className="flex justify-between items-center py-3 border-b border-gray-200">
-                  <span className="text-gray-700 font-medium">MODAL</span>
-                  <span className="text-lg font-bold text-gray-900">{formatCurrency(modal)}</span>
+                <div className="flex justify-between items-center py-3 border-b border-outline-variant">
+                  <span className="text-on-surface-variant font-medium">MODAL</span>
+                  <span className="text-lg font-bold text-on-surface">{formatCurrency(modal)}</span>
                 </div>
 
-                <div className="flex justify-between items-center py-3 border-b-2 border-gray-300">
-                  <span className="text-gray-700 font-semibold">LABA KOTOR</span>
-                  <span className="text-lg font-bold text-blue-900">{formatCurrency(labaKotor)}</span>
+                <div className="flex justify-between items-center py-3 border-b-2 border-outline-variant">
+                  <span className="text-on-surface font-semibold">LABA KOTOR</span>
+                  <span className="text-lg font-bold text-primary">{formatCurrency(labaKotor)}</span>
                 </div>
 
                 <div className="py-3">
-                  <p className="text-gray-700 font-semibold mb-3">BIAYA</p>
+                  <p className="text-on-surface font-semibold mb-3">BIAYA</p>
                   <div className="space-y-2 pl-4">
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Transportasi</span>
-                      <span className="text-gray-900">{formatCurrency(transportasi)}</span>
+                      <span className="text-on-surface-variant">Transportasi</span>
+                      <span className="text-on-surface">{formatCurrency(transportasi)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Ongkos Kirim</span>
-                      <span className="text-gray-900">{formatCurrency(ongkos_kirim)}</span>
+                      <span className="text-on-surface-variant">Ongkos Kirim</span>
+                      <span className="text-on-surface">{formatCurrency(ongkos_kirim)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Operasional</span>
-                      <span className="text-gray-900">{formatCurrency(operasional)}</span>
+                      <span className="text-on-surface-variant">Operasional</span>
+                      <span className="text-on-surface">{formatCurrency(operasional)}</span>
                     </div>
-                    <div className="flex justify-between text-sm border-t border-gray-200 pt-2 mt-2">
-                      <span className="text-gray-700 font-semibold">Total Biaya</span>
-                      <span className="text-gray-900 font-semibold">{formatCurrency(totalBiaya)}</span>
+                    <div className="flex justify-between text-sm border-t border-outline-variant pt-2 mt-2">
+                      <span className="text-on-surface font-semibold">Total Biaya</span>
+                      <span className="text-on-surface font-semibold">{formatCurrency(totalBiaya)}</span>
                     </div>
                   </div>
                 </div>
 
-                <div className={`flex justify-between items-center py-4 border-t-2 ${isLaba ? 'border-green-400' : 'border-red-400'}`}>
+                <div className={`flex justify-between items-center py-4 border-t-2 ${isLaba ? 'border-success' : 'border-error'}`}>
                   <div className="flex items-center gap-2">
-                    <span className="text-gray-900 font-bold text-lg">LABA BERSIH</span>
+                    <span className="text-on-surface font-bold text-lg">LABA BERSIH</span>
                     {isLaba ? (
-                      <ArrowUpRight className="w-5 h-5 text-green-500" />
+                      <span className="material-symbols-outlined text-success">trending_up</span>
                     ) : (
-                      <ArrowDownRight className="w-5 h-5 text-red-500" />
+                      <span className="material-symbols-outlined text-error">trending_down</span>
                     )}
                   </div>
-                  <span className={`text-2xl font-bold ${isLaba ? 'text-green-600' : 'text-red-600'}`}>
+                  <span className={`text-2xl font-bold ${isLaba ? 'text-success' : 'text-error'}`}>
                     {formatCurrency(labaBersih)}
                   </span>
                 </div>
 
-                <div className="text-center pt-2">
-                  <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold ${isLaba ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                    {isLaba ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                <div className="no-print text-center pt-2">
+                  <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold ${isLaba ? 'bg-success-container text-success' : 'bg-error-container text-on-error-container'}`}>
+                    {isLaba ? (
+                      <span className="material-symbols-outlined text-[18px]">trending_up</span>
+                    ) : (
+                      <span className="material-symbols-outlined text-[18px]">trending_down</span>
+                    )}
                     {isLaba ? 'LABA' : 'RUGI'}
                   </span>
                 </div>
               </div>
             </div>
+            <PrintFooter />
           </div>
         )}
 
-        {!isLoading && submitted && !data && (
-          <div className="text-center py-12 text-gray-400">
-            <Receipt className="w-12 h-12 mx-auto mb-3 opacity-50" />
+        {!isError && !isLoading && submitted && !data && (
+          <div className="text-center py-12 text-on-surface-variant">
+            <span className="material-symbols-outlined text-[48px] opacity-50 block mb-3">receipt_long</span>
             <p>Data laporan tidak tersedia</p>
           </div>
         )}
-      </div>
+      </main>
     </>
   );
 }

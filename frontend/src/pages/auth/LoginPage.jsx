@@ -7,6 +7,7 @@ import useAuthStore from '../../stores/authStore'
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const setAuth = useAuthStore((s) => s.setAuth)
   const navigate = useNavigate()
@@ -27,52 +28,81 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-900 to-blue-700 px-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-blue-900 tracking-tight">BALARAJA</h1>
-          <p className="text-gray-500 mt-2">Masuk ke akun Anda</p>
+    <div className="min-h-screen flex items-center justify-center p-4 antialiased bg-gradient-to-br from-primary-container to-surface-tint">
+      <div className="bg-surface w-full max-w-md rounded-[24px] p-8 shadow-[0_8px_30px_rgb(0,0,0,0.12)] flex flex-col items-center">
+        <div className="mb-6 w-24 h-24 rounded-2xl overflow-hidden shadow-sm flex items-center justify-center bg-surface-container-lowest">
+          <img alt="BALARAJA Logo" className="w-full h-full object-cover" src="/bj.png" />
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-              Email
-            </label>
+        <div className="text-center mb-8 w-full">
+          <h1 className="text-3xl font-bold text-primary mb-2">BALARAJA</h1>
+          <p className="text-sm text-on-surface-variant">Sistem Manajemen Toko</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="w-full space-y-5">
+          <div className="relative group">
+            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-outline group-focus-within:text-primary transition-colors">
+              <span className="material-symbols-outlined">mail</span>
+            </div>
             <input
               id="email"
               type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-              placeholder="email@contoh.com"
+              className="block w-full pl-11 pr-4 py-3.5 bg-surface-container-low border border-outline-variant rounded-xl text-on-surface text-base placeholder-outline focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+              placeholder="Email Address"
             />
           </div>
 
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-              Kata Sandi
-            </label>
+          <div className="relative group">
+            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-outline group-focus-within:text-primary transition-colors">
+              <span className="material-symbols-outlined">lock</span>
+            </div>
             <input
               id="password"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-              placeholder="Masukkan kata sandi"
+              className="block w-full pl-11 pr-12 py-3.5 bg-surface-container-low border border-outline-variant rounded-xl text-on-surface text-base placeholder-outline focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+              placeholder="Password"
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute inset-y-0 right-0 pr-4 flex items-center text-outline hover:text-on-surface transition-colors"
+              tabIndex={-1}
+            >
+              <span className="material-symbols-outlined" id="visibility-icon">
+                {showPassword ? 'visibility_off' : 'visibility'}
+              </span>
+            </button>
+          </div>
+
+          <div className="flex justify-end pt-1">
+            <a className="text-xs font-medium text-primary hover:underline" href="#">
+              Lupa Password?
+            </a>
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 bg-blue-900 text-white font-semibold rounded-lg hover:bg-blue-800 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-primary text-on-primary font-semibold text-lg py-4 rounded-xl shadow-md hover:shadow-lg hover:bg-primary-container focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-all active:scale-[0.98] mt-2 flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'Memproses...' : 'Masuk'}
           </button>
         </form>
+
+        <div className="mt-8 text-center">
+          <p className="text-sm text-on-surface-variant">
+            Butuh bantuan?{' '}
+            <a className="text-primary font-medium hover:underline" href="#">
+              Hubungi Admin
+            </a>
+          </p>
+        </div>
       </div>
     </div>
   )

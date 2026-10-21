@@ -1,167 +1,293 @@
+import { useMemo, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import useAuthStore from '../../stores/authStore';
 import { formatCurrency, formatNumber } from '../../utils/format';
-import StatCard from '../../components/ui/StatCard';
 import { useNavigate } from 'react-router-dom';
-import {
-  DollarSign,
-  TrendingUp,
-  Wallet,
-  ArrowUpRight,
-  ArrowDownRight,
-  Package,
-  Boxes,
-  AlertTriangle,
-  XCircle,
-  ShoppingCart,
-  ShoppingBag,
-  CreditCard,
-  AlertCircle,
-} from 'lucide-react';
-import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
+import api from '../../services/api';
+import Chart from 'chart.js/auto';
+import { LoadingState, ErrorState, EmptyState } from '../../components/ui/States';
 
 async function fetchDashboard() {
-  const res = await fetch('/api/dashboard');
-  if (!res.ok) throw new Error('Gagal memuat data dashboard');
-  return res.json();
+  const res = await api.get('/dashboard');
+  return res.data;
+}
+
+function cssVar(name, fallback) {
+  if (typeof window === 'undefined' || !window.getComputedStyle) return fallback;
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
+
+function useChart(canvasRef, config) {
+  const chartRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !config) return undefined;
+    chartRef.current = new Chart(canvas, config);
+    return () => {
+      if (chartRef.current) chartRef.current.destroy();
+      chartRef.current = null;
+    };
+  }, [canvasRef, config]);
+}
+
+function chartScales() {
+  const tickColor = () => cssVar('--color-on-surface-variant', '#43474e');
+  const gridColor = () => cssVar('--color-outline-variant', '#c4c6cf');
+  return {
+    x: {
+      grid: { display: false },
+      ticks: { font: { size: 11 }, color: tickColor },
+      border: { color: gridColor },
+    },
+    y: {
+      beginAtZero: true,
+      ticks: { font: { size: 11 }, color: tickColor, callback: (v) => formatNumber(v) },
+      grid: { color: gridColor },
+      border: { display: false },
+    },
+  };
+}
+
+const chartBaseOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  animation: { duration: 400 },
+  plugins: { legend: { display: false }, tooltip: { displayColors: false } },
+};
+
+function greeting() {
+  const hour = new Date().getHours();
+  if (hour < 11) return 'Selamat pagi';
+  if (hour < 15) return 'Selamat siang';
+  if (hour < 18) return 'Selamat sore';
+  return 'Selamat malam';
 }
 
 export default function DashboardPage() {
   const user = useAuthStore((s) => s.user);
   const navigate = useNavigate();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, isFetching, error, refetch } = useQuery({
     queryKey: ['dashboard'],
     queryFn: fetchDashboard,
   });
 
+  const lineRef = useRef(null);
+  const barRef = useRef(null);
+
+  const omzetData = useMemo(() => data?.omzet_bulanan || [], [data]);
+  const penjualanData = useMemo(() => data?.penjualan_bulanan || [], [data]);
+
+  const omzetConfig = useMemo(
+    () => ({
+      type: 'line',
+      data: {
+        labels: omzetData.map((x) => x.label),
+        datasets: [
+          {
+            data: omzetData.map((x) => x.value),
+            borderColor: () => cssVar('--color-primary', '#022448'),
+            backgroundColor: () => cssVar('--color-primary-fixed', '#d5e3ff'),
+            borderWidth: 2,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            tension: 0.4,
+            fill: true,
+          },
+        ],
+      },
+      options: { ...chartBaseOptions, scales: chartScales() },
+    }),
+    [omzetData],
+  );
+
+  const penjualanConfig = useMemo(
+    () => ({
+      type: 'bar',
+      data: {
+        labels: penjualanData.map((x) => x.label),
+        datasets: [
+          {
+            data: penjualanData.map((x) => x.value),
+            backgroundColor: () => cssVar('--color-tertiary-fixed-dim', '#edbf7f'),
+            borderRadius: 4,
+            maxBarThickness: 28,
+          },
+        ],
+      },
+      options: { ...chartBaseOptions, scales: chartScales() },
+    }),
+    [penjualanData],
+  );
+
+  useChart(lineRef, omzetData.length ? omzetConfig : null);
+  useChart(barRef, penjualanData.length ? penjualanConfig : null);
+
+  if (isError) {
+    return (
+      <div className="py-4">
+        <ErrorState
+          error={error}
+          onRetry={() => refetch()}
+          title="Gagal memuat dashboard"
+        />
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-gray-500">Memuat data...</p>
+      <div className="py-4">
+        <LoadingState message="Memuat data dashboard..." rows={4} />
       </div>
     );
   }
 
   const d = data || {};
 
-  const quickActions = [
-    { label: 'Pembelian', to: '/pembelian/tambah', color: 'bg-indigo-500 hover:bg-indigo-600' },
-    { label: 'Penjualan', to: '/penjualan/tambah', color: 'bg-green-500 hover:bg-green-600' },
-    { label: 'Pembayaran', to: '/pembayaran', color: 'bg-teal-500 hover:bg-teal-600' },
-    { label: 'Biaya', to: '/biaya', color: 'bg-orange-500 hover:bg-orange-600' },
+  const stats = [
+    {
+      label: 'Omzet Hari Ini',
+      icon: 'calendar_today',
+      value: formatCurrency(d.omzet_hari_ini),
+      from: 'from-primary',
+      to: 'to-primary-container',
+      valueClass: 'text-on-primary',
+      labelClass: 'text-primary-fixed',
+    },
+    {
+      label: 'Piutang Belum Lunas',
+      icon: 'account_balance_wallet',
+      value: formatCurrency(d.piutang_belum_lunas),
+      from: 'from-tertiary-fixed',
+      to: 'to-tertiary-fixed-dim',
+      valueClass: 'text-on-tertiary-fixed',
+      labelClass: 'text-on-tertiary-fixed/80',
+    },
+    {
+      label: 'Stok Menipis',
+      icon: 'warning',
+      value: `${formatNumber(d.stok_menipis)} Produk`,
+      from: 'from-error',
+      to: 'to-on-error-container',
+      valueClass: 'text-on-error',
+      labelClass: 'text-error-container',
+    },
+    {
+      label: 'Transaksi Hari Ini',
+      icon: 'shopping_cart',
+      value: formatNumber(d.transaksi_hari_ini),
+      from: 'from-success-fixed',
+      to: 'to-success-container',
+      valueClass: 'text-on-success-container',
+      labelClass: 'text-on-success-container/80',
+    },
   ];
 
-  const labaRugi = d.laba_bersih ?? 0;
-  const isLaba = labaRugi >= 0;
+  const quickActions = [
+    { label: 'Tambah Pembelian', icon: 'add_shopping_cart', to: '/pembelian/tambah', chip: 'bg-primary-container text-on-primary-container' },
+    { label: 'Tambah Penjualan', icon: 'point_of_sale', to: '/penjualan/tambah', chip: 'bg-secondary-container text-on-secondary-container' },
+    { label: 'Bayar Piutang', icon: 'payments', to: '/pembayaran', chip: 'bg-tertiary-fixed text-on-tertiary-fixed' },
+    { label: 'Input Biaya', icon: 'receipt_long', to: '/biaya', chip: 'bg-error-container text-on-error-container' },
+  ];
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-500">Selamat datang, {user?.name || 'Admin'}</p>
+    <div className="space-y-6 py-2">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h1 className="text-xl font-semibold text-on-surface">
+            {greeting()}, {user?.name || 'Admin'}
+          </h1>
+          <p className="text-sm text-on-surface-variant mt-1">
+            Ringkasan aktivitas BALARAJA hari ini
+          </p>
+        </div>
+        {isFetching && (
+          <span className="flex items-center gap-2 text-xs text-on-surface-variant">
+            <span className="material-symbols-outlined text-base animate-spin">progress_activity</span>
+            Memperbarui...
+          </span>
+        )}
       </div>
 
-      {/* Financial Summary */}
-      <div>
-        <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">
-          Ringkasan Keuangan
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
+        {stats.map((s) => (
+          <div
+            key={s.label}
+            className={`bg-gradient-to-br ${s.from} ${s.to} p-4 rounded-2xl shadow-sm relative overflow-hidden`}
+          >
+            <span className="material-symbols-outlined absolute -right-3 -bottom-4 opacity-10 text-[96px] select-none pointer-events-none">
+              {s.icon}
+            </span>
+            <p className={`flex items-center gap-1.5 mb-2 ${s.labelClass}`}>
+              <span className="material-symbols-outlined text-sm">{s.icon}</span>
+              <span className="text-xs font-medium">{s.label}</span>
+            </p>
+            <p className={`text-base sm:text-lg font-semibold tabular-nums break-words ${s.valueClass}`}>
+              {s.value}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <section aria-labelledby="statistik-bulanan" className="space-y-3">
+        <h2 id="statistik-bulanan" className="text-lg font-semibold text-on-surface">
+          Statistik Bulanan
         </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title="Omzet Hari ini" value={formatCurrency(d.omzet_hari_ini)} icon={DollarSign} color="blue" />
-          <StatCard title="Omzet Bulan ini" value={formatCurrency(d.omzet_bulan_ini)} icon={TrendingUp} color="green" />
-          <StatCard title="Total Modal" value={formatCurrency(d.total_modal)} icon={Wallet} color="purple" />
-          <StatCard
-            title="Laba Bersih"
-            value={formatCurrency(d.laba_bersih)}
-            icon={isLaba ? ArrowUpRight : ArrowDownRight}
-            color={isLaba ? 'emerald' : 'red'}
-          />
-        </div>
-      </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/30 p-4">
+            <h3 className="text-xs font-medium text-on-surface-variant mb-4">Omzet Bulanan</h3>
+            {omzetData.length ? (
+              <div className="h-48 w-full">
+                <canvas ref={lineRef} role="img" aria-label="Grafik omzet bulanan" />
+              </div>
+            ) : (
+              <EmptyState
+                icon="show_chart"
+                title="Belum ada data omzet"
+                description="Data grafik muncul setelah ada transaksi penjualan."
+              />
+            )}
+          </div>
 
-      {/* Inventory Summary */}
-      <div>
-        <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">
-          Ringkasan Inventaris
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title="Total Produk" value={formatNumber(d.total_produk)} icon={Package} color="orange" />
-          <StatCard title="Total Stok" value={formatNumber(d.total_stok)} icon={Boxes} color="cyan" />
-          <StatCard title="Stok Menipis" value={formatNumber(d.stok_menipis)} icon={AlertTriangle} color="yellow" />
-          <StatCard title="Stok Habis" value={formatNumber(d.stok_habis)} icon={XCircle} color="red" />
+          <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/30 p-4">
+            <h3 className="text-xs font-medium text-on-surface-variant mb-4">Penjualan Bulanan</h3>
+            {penjualanData.length ? (
+              <div className="h-48 w-full">
+                <canvas ref={barRef} role="img" aria-label="Grafik penjualan bulanan" />
+              </div>
+            ) : (
+              <EmptyState
+                icon="bar_chart"
+                title="Belum ada data penjualan"
+                description="Data grafik muncul setelah ada transaksi penjualan."
+              />
+            )}
+          </div>
         </div>
-      </div>
+      </section>
 
-      {/* Transaction Summary */}
-      <div>
-        <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">
-          Ringkasan Transaksi
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title="Total Pembelian" value={formatCurrency(d.total_pembelian)} icon={ShoppingCart} color="indigo" />
-          <StatCard title="Total Penjualan" value={formatCurrency(d.total_penjualan)} icon={ShoppingBag} color="green" />
-          <StatCard title="Pembayaran Diterima" value={formatCurrency(d.pembayaran_diterima)} icon={CreditCard} color="teal" />
-          <StatCard title="Piutang Belum Lunas" value={formatCurrency(d.piutang_belum_lunas)} icon={AlertCircle} color="red" />
-        </div>
-      </div>
-
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl shadow p-6">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">Omzet Bulanan</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={d.omzet_bulanan || []}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip formatter={(v) => formatCurrency(v)} />
-              <Line type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="bg-white rounded-xl shadow p-6">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">Penjualan Bulanan</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={d.penjualan_bulanan || []}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip formatter={(v) => formatCurrency(v)} />
-              <Bar dataKey="value" fill="#22c55e" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Quick Actions */}
-      <div>
-        <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">
+      <section aria-labelledby="aksi-cepat" className="space-y-3">
+        <h2 id="aksi-cepat" className="text-lg font-semibold text-on-surface">
           Aksi Cepat
         </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {quickActions.map((a) => (
             <button
               key={a.to}
+              type="button"
               onClick={() => navigate(a.to)}
-              className={`${a.color} text-white rounded-xl px-4 py-3 text-sm font-semibold shadow transition-colors`}
+              className="no-print bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 flex flex-col items-center justify-center gap-2 hover:bg-surface-container-low transition-colors active:scale-[0.98] transition-transform text-left"
             >
-              {a.label}
+              <span className={`${a.chip} p-3 rounded-full`}>
+                <span className="material-symbols-outlined" aria-hidden="true">{a.icon}</span>
+              </span>
+              <span className="text-xs font-medium text-on-surface text-center">{a.label}</span>
             </button>
           ))}
         </div>
-      </div>
+      </section>
     </div>
   );
 }

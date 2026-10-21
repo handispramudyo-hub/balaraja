@@ -1,22 +1,26 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import api from '../../services/api';
-import { Pencil, Trash2, Plus, X, Tag } from 'lucide-react';
+import Modal from '../../components/ui/Modal';
 
 const initialForm = { name: '', description: '' };
+
+// Array kosong di level modul agar referensinya stabil antar render.
+const EMPTY_LIST = [];
 
 export default function CategoriesPage() {
   const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(initialForm);
+  const [search, setSearch] = useState('');
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['categories'],
     queryFn: async () => {
       const res = await api.get('/categories');
-      return res.data.data;
+      return Array.isArray(res.data) ? res.data : (res.data.data || []);
     },
   });
 
@@ -82,136 +86,149 @@ export default function CategoriesPage() {
     deleteMutation.mutate(item.id);
   }
 
-  const categories = data || [];
+  // Referensi stabil supaya useMemo di bawah benar-benar bekerja;
+  // `data || []` akan membuat array baru setiap render.
+  const categories = data || EMPTY_LIST;
+
+  const filteredCategories = useMemo(() => {
+    if (!search.trim()) return categories;
+    const q = search.toLowerCase();
+    return categories.filter(
+      (item) =>
+        item.name?.toLowerCase().includes(q) ||
+        item.description?.toLowerCase().includes(q)
+    );
+  }, [categories, search]);
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Tag className="w-6 h-6 text-blue-600" />
-            Kategori
-          </h1>
-          <p className="text-gray-500 mt-1">Kelola data kategori produk</p>
+    <main className="px-4 py-6 max-w-4xl mx-auto space-y-4">
+      <div className="mb-6">
+        <h2 className="text-lg font-semibold text-primary">Kategori</h2>
+        <p className="text-sm text-on-surface-variant mt-1">Kelola data kategori produk</p>
+      </div>
+
+      <div className="relative">
+        <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline">search</span>
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Cari kategori..."
+          className="w-full h-12 pl-12 pr-4 rounded-xl border border-outline-variant bg-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm text-on-surface placeholder:text-outline transition-all duration-200 shadow-sm"
+        />
+      </div>
+
+      {isLoading && (
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <span className="material-symbols-outlined text-outline animate-spin text-4xl">progress_activity</span>
+          <p className="text-outline text-sm">Memuat data...</p>
         </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg font-semibold text-sm transition-colors"
+      )}
+
+      {isError && (
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <span className="material-symbols-outlined text-error text-4xl">error</span>
+          <p className="text-error text-sm">Gagal memuat data: {error?.message}</p>
+        </div>
+      )}
+
+      {!isLoading && !isError && filteredCategories.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <span className="material-symbols-outlined text-outline text-5xl">category</span>
+          <p className="text-outline text-sm">
+            {search ? 'Tidak ada kategori ditemukan' : 'Belum ada data kategori'}
+          </p>
+        </div>
+      )}
+
+      {!isLoading && !isError && filteredCategories.map((item) => (
+        <div
+          key={item.id}
+          className="bg-surface rounded-xl p-4 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.06)] border border-surface-container-high flex gap-4 items-center"
         >
-          <Plus className="w-4 h-4" />
-          Tambah Kategori
-        </button>
-      </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-base font-semibold text-on-surface truncate">{item.name}</h3>
+            <p className="text-sm text-on-surface-variant truncate">{item.description || 'Tidak ada keterangan'}</p>
+          </div>
+          <div className="flex flex-col gap-2 shrink-0">
+            <button
+              onClick={() => openEdit(item)}
+              className="w-8 h-8 rounded-full flex items-center justify-center text-outline hover:bg-surface-variant hover:text-primary transition-colors"
+              title="Edit"
+            >
+              <span className="material-symbols-outlined text-[20px]">edit</span>
+            </button>
+            <button
+              onClick={() => handleDelete(item)}
+              className="w-8 h-8 rounded-full flex items-center justify-center text-outline hover:bg-error-container hover:text-error transition-colors"
+              title="Hapus"
+            >
+              <span className="material-symbols-outlined text-[20px]">delete</span>
+            </button>
+          </div>
+        </div>
+      ))}
 
-      {/* Table */}
-      <div className="bg-white rounded-xl shadow overflow-hidden">
-        {isLoading ? (
-          <div className="flex items-center justify-center h-48">
-            <p className="text-gray-500">Memuat data...</p>
-          </div>
-        ) : isError ? (
-          <div className="flex items-center justify-center h-48">
-            <p className="text-red-500">Gagal memuat data: {error?.message}</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">No</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Nama</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Keterangan</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {categories.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="px-6 py-8 text-center text-gray-400">
-                      Belum ada data kategori
-                    </td>
-                  </tr>
-                ) : (
-                  categories.map((item, idx) => (
-                    <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{idx + 1}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.name}</td>
-                      <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">{item.description || '-'}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => openEdit(item)}
-                            className="text-blue-600 hover:text-blue-800 transition-colors p-1 rounded hover:bg-blue-50"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(item)}
-                            className="text-red-600 hover:text-red-800 transition-colors p-1 rounded hover:bg-red-50"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      <button
+        onClick={openCreate}
+        className="fixed bottom-24 right-4 md:bottom-8 md:right-8 w-14 h-14 bg-primary text-on-primary rounded-2xl shadow-[0_8px_12px_-4px_rgba(0,0,0,0.1)] flex items-center justify-center hover:scale-105 active:scale-95 transition-all z-40"
+        title="Tambah Kategori"
+      >
+        <span className="material-symbols-outlined text-[28px]">add</span>
+      </button>
 
-      {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
-            <div className="flex items-center justify-between px-6 py-4 border-b">
-              <h3 className="text-lg font-semibold text-gray-900">
+        <Modal onClose={closeModal} title="Form kategori" variant="sheet" zIndex={60} panelClassName="bg-surface w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[85vh]" initialFocus='input, select, textarea'>
+            <div className="flex items-center justify-between px-6 pt-6 pb-2">
+              <h3 className="text-on-surface text-lg font-semibold">
                 {editing ? 'Edit Kategori' : 'Tambah Kategori'}
               </h3>
-              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 transition-colors">
-                <X className="w-5 h-5" />
+              <button
+                onClick={closeModal}
+                className="p-2 rounded-xl text-outline hover:bg-surface-container-high transition-colors"
+              >
+                <span className="material-symbols-outlined">close</span>
               </button>
             </div>
+            <div className="overflow-y-auto flex-1 pb-20">
             <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nama <span className="text-red-500">*</span>
-                </label>
+                <label className="block text-xs font-medium text-on-surface-variant mb-1.5" htmlFor="nama-1">Nama *</label>
                 <input
+                  id="nama-1"
                   type="text"
                   required
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                  className="w-full h-12 px-4 bg-surface text-on-surface placeholder-outline rounded-xl border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm transition"
                   placeholder="Masukkan nama kategori"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Keterangan</label>
+                <label className="block text-xs font-medium text-on-surface-variant mb-1.5" htmlFor="keterangan-2">Keterangan</label>
                 <textarea
+                  id="keterangan-2"
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                   rows={3}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition resize-none"
+                  className="w-full px-4 py-3 bg-surface text-on-surface placeholder-outline rounded-xl border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm transition resize-none"
                   placeholder="Masukkan keterangan (opsional)"
                 />
               </div>
             </form>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t">
+            </div>
+            <div className="sticky bottom-0 bg-surface border-t border-outline-variant/30 px-6 py-3 flex justify-end gap-3">
               <button
                 type="button"
                 onClick={closeModal}
-                className="px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                className="h-10 px-5 text-sm font-medium text-primary bg-transparent hover:bg-primary/10 rounded-xl transition-colors"
               >
                 Batal
               </button>
               <button
                 onClick={handleSubmit}
                 disabled={createMutation.isPending || updateMutation.isPending}
-                className="px-4 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50"
+                className="h-10 px-5 text-sm font-medium text-on-primary bg-primary hover:bg-primary/90 rounded-xl transition-colors disabled:opacity-50"
               >
                 {createMutation.isPending || updateMutation.isPending
                   ? 'Menyimpan...'
@@ -220,9 +237,8 @@ export default function CategoriesPage() {
                   : 'Simpan'}
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
-    </div>
+    </main>
   );
 }
