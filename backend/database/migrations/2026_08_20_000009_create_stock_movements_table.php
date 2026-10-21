@@ -11,7 +11,10 @@ return new class extends Migration
         Schema::create('stock_movements', function (Blueprint $table) {
             $table->id();
             $table->foreignId('product_id')->constrained();
-            $table->enum('type', ['purchase', 'sale', 'adjustment']);
+            // Daftar final sudah termasuk seluruh tipe pembatalan. Nilai ini
+            // di-narrow lalu di-luaskan lagi oleh migration 09-24/09-25/09-26,
+            // jadi instalasi baru langsung benar tanpa depending pada urutan.
+            $table->enum('type', ['purchase', 'sale', 'adjustment', 'purchase_reverse', 'sale_reverse', 'adjustment_reverse']);
             $table->integer('quantity');
             $table->integer('stock_before');
             $table->integer('stock_after');

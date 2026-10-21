@@ -9,15 +9,19 @@ use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\PurchaseController;
 use App\Http\Controllers\Api\SaleController;
 use App\Http\Controllers\Api\PaymentController;
+use App\Http\Controllers\Api\SupplierPaymentController;
 use App\Http\Controllers\Api\ExpenseController;
+use App\Http\Controllers\Api\InstallmentPlanController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ReportController;
+use App\Http\Controllers\Api\ReportExportController;
 
 Route::post('/login', [AuthController::class, 'login']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'user']);
+    Route::post('/change-password', [AuthController::class, 'changePassword']);
 
     Route::get('/dashboard', [DashboardController::class, 'index']);
 
@@ -26,11 +30,32 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('customers', CustomerController::class);
     Route::apiResource('products', ProductController::class);
 
-    Route::apiResource('purchases', PurchaseController::class)->only(['index', 'store', 'show']);
-    Route::apiResource('sales', SaleController::class)->only(['index', 'store', 'show']);
+    // Ganti satuan dasar produk. Dipisah dari form produk biasa karena ini
+    // satu-satunya operasi yang mengubah makna `products.stock`, jadi harus
+    // ada langkah baca-dulu (`preview`) lalu konfirmasi.
+    //
+    // `preview` memakai POST, bukan GET: yang dipreview adalah daftar satuan
+    // yang sedang diedit di form, jadi informasinya ada di body. Menaruhnya di
+    // query string berarti url berisi seluruh isi form produk.
+    Route::post('products/{id}/units/rebase-preview', [ProductController::class, 'previewUnitRebase']);
+    Route::post('products/{id}/units/rebase', [ProductController::class, 'rebaseUnit']);
 
-    Route::apiResource('payments', PaymentController::class)->only(['index', 'store']);
-    Route::apiResource('expenses', ExpenseController::class);
+    Route::apiResource('purchases', PurchaseController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
+    Route::apiResource('sales', SaleController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
+
+    // Pembayaran piutang pelanggan (tabel `payments`).
+    Route::apiResource('payments', PaymentController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
+    // Pelunasan utang ke supplier (tabel `supplier_payments`). Sengaja
+    // terpisah dari `payments` - lihat docblock migration dan controller.
+    Route::apiResource('supplier-payments', SupplierPaymentController::class)
+        ->only(['index', 'store', 'show', 'update', 'destroy']);
+    Route::apiResource('expenses', ExpenseController::class)->only(['index', 'store', 'update', 'destroy']);
+
+    // Jadwal cicilan. Sengaja TANPA `store` - plan hanya boleh dibuat
+    // bersamaan dengan transaksi induknya lewat `installment_months`,
+    // supaya tidak pernah ada plan yang menunjuk transaksi tidak ada.
+    Route::apiResource('installment-plans', InstallmentPlanController::class)
+        ->only(['index', 'show', 'update', 'destroy']);
 
     Route::prefix('reports')->group(function () {
         Route::get('/stock', [ReportController::class, 'stock']);
@@ -39,5 +64,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/receivables', [ReportController::class, 'receivables']);
         Route::get('/expenses', [ReportController::class, 'expenses']);
         Route::get('/profit-loss', [ReportController::class, 'profitLoss']);
+
+        // Export memakai satu endpoint + query ?format=excel|pdf
+        Route::get('/export/{report}', ReportExportController::class)
+            ->whereIn('report', ['sales', 'purchases', 'receivables']);
     });
 });

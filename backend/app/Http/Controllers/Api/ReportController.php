@@ -3,15 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Customer;
 use App\Models\Expense;
 use App\Models\Product;
-use App\Models\Purchase;
-use App\Models\Sale;
 use App\Models\SaleItem;
-use App\Models\StockMovement;
+use App\Services\ReportQueryService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class ReportController extends Controller
@@ -26,122 +24,135 @@ class ReportController extends Controller
 
         $date = $request->date ? Carbon::parse($request->date) : Carbon::today();
 
-        $products = Product::with('category')
+        $products = Product::with(['category', 'units'])
             ->when($request->category_id, fn ($q) => $q->where('category_id', $request->category_id))
             ->when($request->product_id, fn ($q) => $q->where('id', $request->product_id))
-            ->get()
-            ->map(function ($product) use ($date) {
-                $movements = StockMovement::where('product_id', $product->id)
-                    ->where('date', '<=', $date);
+            ->get();
 
-                $stockAwal = (clone $movements)->where('date', '<', $date)->latest('id')->value('stock_after') ?? 0;
-                $stokMasuk = (clone $movements)->where('type', 'purchase')->sum('quantity');
-                $stokKeluar = (clone $movements)->where('type', 'sale')->sum('quantity');
+        $ids = $products->pluck('id')->all();
+        $movement = $ids === [] ? collect() : $this->stockMovementSummary($ids, $date);
 
-                return [
-                    'product_id' => $product->id,
-                    'product_code' => $product->code,
-                    'product_name' => $product->name,
-                    'category' => $product->category->name,
-                    'unit' => $product->unit,
-                    'stock_awal' => $stockAwal,
-                    'stok_masuk' => $stokMasuk,
-                    'stok_keluar' => $stokKeluar,
-                    'stok_akhir' => $stockAwal + $stokMasuk - $stokKeluar,
-                ];
-            });
+        $data = $products->map(function ($product) use ($date, $movement) {
+            $row = $movement->get($product->id);
+
+            $stokMasuk = $row ? (float) $row->masuk : 0.0;
+            $stokKeluar = $row ? (float) $row->keluar : 0.0;
+            $netAfter = $row ? (float) $row->net_after : 0.0;
+
+            // Jangkar ke stok terkini lalu mundurkan movement yang terjadi
+            // SETELAH tanggal laporan, supaya angka historis tetap konsisten
+            // dengan stok sekarang (termasuk untuk data lama yang stoknya pernah
+            // diubah langsung tanpa movement).
+            $stokSesudah = (float) $product->stock - $netAfter;
+            $stokSebelum = $stokSesudah - ($stokMasuk - $stokKeluar);
+
+            return [
+                'id' => $product->id,
+                'kode' => $product->code,
+                'nama' => $product->name,
+                'category' => $product->category?->name,
+                'unit' => $product->unit,
+                // Angka stok di laporan ini selalu dalam satuan dasar, jadi
+                // kolomnya perlu menyatakan satuan itu secara eksplisit. Kalau
+                // hanya menampilkan "unit" (nama satuan yang sudah usang di
+                // produk lama), angka 792 bisa dibaca sebagai 792 dus.
+                'base_unit' => $product->units->firstWhere('is_base', true)?->name ?? $product->unit,
+                'stok_sebelum' => $stokSebelum,
+                'stok_masuk' => $stokMasuk,
+                'stok_keluar' => $stokKeluar,
+                'stok_sesudah' => $stokSesudah,
+                'tanggal' => ($row && $row->last_date)
+                    ? Carbon::parse($row->last_date)->toDateString()
+                    : null,
+            ];
+        });
 
         return response()->json([
             'date' => $date->format('Y-m-d'),
-            'data' => $products,
+            'data' => $data,
         ]);
     }
 
-    public function purchases(Request $request)
+    /**
+     * Agregasi seluruh movement stok per produk dalam SATU query.
+     *
+     * `delta` menerjemahkan tipe movement menjadi dampak bersih terhadap stok.
+     * Kunci tanda: tipe pembatalan menyimpan `quantity` BERLAWANAN dengan
+     * efeknya, jadi keduanya harus dibalik agar net-nya nol saat dibatalkan.
+     *
+     *   purchase                 → quantity  (+q, stok masuk)
+     *   purchase_reverse (-q)    → quantity  (-q, stok keluar)
+     *   sale (+q)                → -quantity (-q, stok keluar)
+     *   sale_reverse (-q)        → -quantity (+q, stok masuk)
+     *   adjustment               → quantity
+     *   adjustment_reverse (-q)  → quantity
+     *
+     * Versi lama hanya menghitung `purchase` & `sale`, sehingga setiap
+     * pembatalan penjualan/pembelian menggeser angka stok. `masuk`/`keluar`
+     * sengaja dihitung BRUTO per sisi supaya penjualan dan pembelian pada
+     * tanggal yang sama tidak saling menutup.
+     */
+    private function stockMovementSummary(array $productIds, Carbon $date): Collection
     {
-        $request->validate([
-            'start_date' => 'nullable|date',
-            'end_date' => 'nullable|date|after_or_equal:start_date',
-            'supplier_id' => 'nullable|exists:suppliers,id',
-        ]);
+        $delta = "CASE stock_movements.type"
+            . ' WHEN \'purchase\' THEN stock_movements.quantity'
+            . ' WHEN \'purchase_reverse\' THEN stock_movements.quantity'
+            . ' WHEN \'adjustment\' THEN stock_movements.quantity'
+            . ' WHEN \'adjustment_reverse\' THEN stock_movements.quantity'
+            . ' WHEN \'sale\' THEN -stock_movements.quantity'
+            . ' WHEN \'sale_reverse\' THEN -stock_movements.quantity'
+            . ' ELSE 0 END';
 
-        $purchases = Purchase::with('supplier')
-            ->when($request->start_date, fn ($q) => $q->where('date', '>=', $request->start_date))
-            ->when($request->end_date, fn ($q) => $q->where('date', '<=', $request->end_date))
-            ->when($request->supplier_id, fn ($q) => $q->where('supplier_id', $request->supplier_id))
-            ->orderByDesc('date')
-            ->get();
+        // Pakai rentang tanggal, BUKAN `date = $day`. Kolom `date` bisa berisi
+        // 'Y-m-d' (MySQL memotong kolom DATE) maupun 'Y-m-d H:i:s' (SQLite
+        // tidak memotong). Rentang '>= 01' dan '< 02' benar untuk keduanya,
+        // sedangkan `= '2026-09-01'` tidak akan cocok dengan nilai bertime.
+        $dayStart = $date->toDateString();
+        $dayNext = $date->copy()->addDay()->toDateString();
 
-        return response()->json(['data' => $purchases]);
-    }
-
-    public function sales(Request $request)
-    {
-        $request->validate([
-            'start_date' => 'nullable|date',
-            'end_date' => 'nullable|date|after_or_equal:start_date',
-            'customer_id' => 'nullable|exists:customers,id',
-            'payment_status' => 'nullable|in:unpaid,partial,paid',
-        ]);
-
-        $sales = Sale::with('customer')
-            ->when($request->start_date, fn ($q) => $q->where('date', '>=', $request->start_date))
-            ->when($request->end_date, fn ($q) => $q->where('date', '<=', $request->end_date))
-            ->when($request->customer_id, fn ($q) => $q->where('customer_id', $request->customer_id))
-            ->when($request->payment_status, fn ($q) => $q->where('payment_status', $request->payment_status))
-            ->orderByDesc('date')
+        return DB::table('stock_movements')
+            ->whereIn('product_id', $productIds)
+            ->selectRaw('product_id')
+            ->selectRaw("SUM(CASE WHEN stock_movements.date >= ? THEN ({$delta}) ELSE 0 END) AS net_after", [$dayNext])
+            ->selectRaw("SUM(CASE WHEN stock_movements.date >= ? AND stock_movements.date < ? AND ({$delta}) > 0 THEN ({$delta}) ELSE 0 END) AS masuk", [$dayStart, $dayNext])
+            ->selectRaw("SUM(CASE WHEN stock_movements.date >= ? AND stock_movements.date < ? AND ({$delta}) < 0 THEN -({$delta}) ELSE 0 END) AS keluar", [$dayStart, $dayNext])
+            ->selectRaw('MAX(stock_movements.date) AS last_date')
+            ->groupBy('product_id')
             ->get()
-            ->map(function ($sale) {
-                return [
-                    'id' => $sale->id,
-                    'sale_number' => $sale->sale_number,
-                    'date' => $sale->date,
-                    'customer' => $sale->customer->name,
-                    'total' => (float) $sale->total,
-                    'payment' => (float) $sale->payment,
-                    'receivable' => (float) $sale->receivable,
-                    'payment_status' => $sale->payment_status,
-                ];
-            });
-
-        return response()->json(['data' => $sales]);
+            ->keyBy('product_id');
     }
 
-    public function receivables(Request $request)
+    public function purchases(Request $request, ReportQueryService $reports)
     {
-        $request->validate([
-            'customer_id' => 'nullable|exists:customers,id',
-            'status' => 'nullable|in:unpaid,partial',
+        $report = $reports->purchases($request);
+
+        return response()->json([
+            'data' => $report['rows'],
+            'meta' => $report['meta'],
+            'summary' => $report['summary'],
         ]);
+    }
 
-        $customers = Customer::where('total_receivable', '>', 0)
-            ->when($request->customer_id, fn ($q) => $q->where('id', $request->customer_id))
-            ->with(['sales' => function ($q) use ($request) {
-                $q->where('payment_status', '!=', 'paid')
-                    ->when($request->status, fn ($sq) => $sq->where('payment_status', $request->status))
-                    ->orderByDesc('date');
-            }])
-            ->get()
-            ->map(function ($customer) {
-                return [
-                    'id' => $customer->id,
-                    'code' => $customer->code,
-                    'name' => $customer->name,
-                    'total_receivable' => (float) $customer->total_receivable,
-                    'sales' => $customer->sales->map(fn ($s) => [
-                        'id' => $s->id,
-                        'sale_number' => $s->sale_number,
-                        'date' => $s->date,
-                        'total' => (float) $s->total,
-                        'payment' => (float) $s->payment,
-                        'receivable' => (float) $s->receivable,
-                        'due_date' => $s->due_date,
-                        'payment_status' => $s->payment_status,
-                    ]),
-                ];
-            });
+    public function sales(Request $request, ReportQueryService $reports)
+    {
+        $report = $reports->sales($request);
 
-        return response()->json(['data' => $customers]);
+        return response()->json([
+            'data' => $report['rows'],
+            'meta' => $report['meta'],
+            'summary' => $report['summary'],
+        ]);
+    }
+
+    public function receivables(Request $request, ReportQueryService $reports)
+    {
+        $report = $reports->receivables($request);
+
+        return response()->json([
+            'data' => $report['rows'],
+            'meta' => $report['meta'],
+            'summary' => $report['summary'],
+        ]);
     }
 
     public function expenses(Request $request)
@@ -157,12 +168,25 @@ class ReportController extends Controller
             ->when($request->end_date, fn ($q) => $q->where('date', '<=', $request->end_date))
             ->when($request->category, fn ($q) => $q->where('category', $request->category));
 
-        $data = $query->clone()->orderByDesc('date')->get();
+        $data = $query->clone()->orderByDesc('date')->get()
+            ->map(function ($e) {
+                return [
+                    'id' => $e->id,
+                    'tanggal' => $e->date,
+                    'kategori' => $e->category,
+                    'keterangan' => $e->description,
+                    'nominal' => (float) $e->amount,
+                ];
+            });
 
         $summaryByCategory = (clone $query)
             ->select('category', DB::raw('SUM(amount) as total'))
             ->groupBy('category')
-            ->get();
+            ->get()
+            ->map(fn ($s) => [
+                'kategori' => $s->category,
+                'total' => (float) $s->total,
+            ]);
 
         $totalExpenses = (clone $query)->sum('amount');
 

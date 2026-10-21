@@ -28,6 +28,18 @@ class Customer extends Model
     ];
 
     /**
+     * Kolom DECIMAL di MySQL dikembalikan driver sebagai string. Tanpa cast
+     * ini, `total_receivable` ikut ter-serialize sebagai string sehingga
+     * penjumlahan di frontend bisa gagal dan angka tampil tanpa formatting.
+     *
+     * @var array<string, string>
+     */
+    protected $casts = [
+        'credit_limit' => 'float',
+        'total_receivable' => 'float',
+    ];
+
+    /**
      * Get the sales for the customer.
      */
     public function sales(): HasMany

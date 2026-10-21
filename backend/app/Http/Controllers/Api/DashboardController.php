@@ -9,7 +9,6 @@ use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\Sale;
 use App\Models\SaleItem;
-use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -21,6 +20,7 @@ class DashboardController extends Controller
         $startOfMonth = Carbon::now()->startOfMonth();
         $endOfMonth = Carbon::now()->endOfMonth();
         $startOfYear = Carbon::now()->startOfYear();
+        $endOfYear = Carbon::now()->endOfYear();
 
         $omzetToday = SaleItem::whereHas('sale', fn ($q) => $q->where('date', $today))
             ->sum('subtotal');
@@ -55,53 +55,66 @@ class DashboardController extends Controller
             ->sum('amount');
         $unpaidReceivable = Sale::where('payment_status', '!=', 'paid')->sum('receivable');
 
-        $months = collect(range(1, 12))->map(function ($m) use ($startOfYear) {
-            return Carbon::now()->year($startOfYear->year)->month($m);
-        });
+        $year = (int) $startOfYear->year;
 
-        $omzetChart = $months->map(function ($m) {
-            $start = $m->copy()->startOfMonth();
-            $end = $m->copy()->endOfMonth();
-            return [
-                'month' => $m->format('M'),
-                'value' => (float) SaleItem::whereHas('sale', function ($q) use ($start, $end) {
-                    $q->whereBetween('date', [$start, $end]);
-                })->sum('subtotal'),
-            ];
-        })->values();
+        // Chart memakai 3 query agregat untuk setahun penuh. Versi lama
+        // menjalankan 60 query (12 omzet + 24 laba + 12 penjualan + 12 biaya),
+        // semuanya korelasi `whereHas` per bulan.
+        $saleItemYear = SaleItem::query()
+            ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+            ->whereBetween('sales.date', [$startOfYear, $endOfYear])
+            ->selectRaw($this->monthExpression('sales.date') . ' AS m')
+            ->selectRaw('SUM(sale_items.subtotal) AS omzet')
+            ->selectRaw('SUM(sale_items.quantity * sale_items.buy_price) AS modal')
+            ->groupBy('m')
+            ->get()
+            ->keyBy('m');
 
-        $labaChart = $months->map(function ($m) {
-            $start = $m->copy()->startOfMonth();
-            $end = $m->copy()->endOfMonth();
-            $omzet = SaleItem::whereHas('sale', function ($q) use ($start, $end) {
-                $q->whereBetween('date', [$start, $end]);
-            })->sum('subtotal');
-            $modal = SaleItem::whereHas('sale', function ($q) use ($start, $end) {
-                $q->whereBetween('date', [$start, $end]);
-            })->sum(DB::raw('quantity * buy_price'));
-            return [
-                'month' => $m->format('M'),
-                'value' => (float) ($omzet - $modal),
-            ];
-        })->values();
+        $salesYear = Sale::query()
+            ->whereBetween('date', [$startOfYear, $endOfYear])
+            ->selectRaw($this->monthExpression('date') . ' AS m')
+            ->selectRaw('COUNT(*) AS c')
+            ->groupBy('m')
+            ->get()
+            ->keyBy('m');
 
-        $salesChart = $months->map(function ($m) {
-            $start = $m->copy()->startOfMonth();
-            $end = $m->copy()->endOfMonth();
-            return [
-                'month' => $m->format('M'),
-                'value' => Sale::whereBetween('date', [$start, $end])->count(),
-            ];
-        })->values();
+        $expenseYear = Expense::query()
+            ->whereBetween('date', [$startOfYear, $endOfYear])
+            ->selectRaw($this->monthExpression('date') . ' AS m')
+            ->selectRaw('SUM(amount) AS a')
+            ->groupBy('m')
+            ->get()
+            ->keyBy('m');
 
-        $expenseChart = $months->map(function ($m) {
-            $start = $m->copy()->startOfMonth();
-            $end = $m->copy()->endOfMonth();
-            return [
-                'month' => $m->format('M'),
-                'value' => (float) Expense::whereBetween('date', [$start, $end])->sum('amount'),
-            ];
-        })->values();
+        // Key = nomor bulan (1-12). `map` biasa mengirim key sebagai argumen
+        // kedua, sedangkan key `range(1,12)` bernilai 0-11 — harus dihindari.
+        $months = collect(range(1, 12))->mapWithKeys(fn ($m) => [
+            $m => Carbon::createFromDate($year, $m, 1)->format('M'),
+        ]);
+
+        $omzetChart = $months
+            ->map(fn ($label, $m) => [
+                'month' => $label,
+                'value' => (float) ($saleItemYear->get($m)->omzet ?? 0),
+            ])->values();
+
+        $labaChart = $months
+            ->map(fn ($label, $m) => [
+                'month' => $label,
+                'value' => (float) (($saleItemYear->get($m)->omzet ?? 0) - ($saleItemYear->get($m)->modal ?? 0)),
+            ])->values();
+
+        $salesChart = $months
+            ->map(fn ($label, $m) => [
+                'month' => $label,
+                'value' => (int) ($salesYear->get($m)->c ?? 0),
+            ])->values();
+
+        $expenseChart = $months
+            ->map(fn ($label, $m) => [
+                'month' => $label,
+                'value' => (float) ($expenseYear->get($m)->a ?? 0),
+            ])->values();
 
         return response()->json([
             'financial_summary' => [
@@ -132,5 +145,17 @@ class DashboardController extends Controller
                 'expense_chart' => $expenseChart,
             ],
         ]);
+    }
+
+    /**
+     * Ekspresi SQL untuk mengambil nomor bulan dari sebuah kolom tanggal.
+     * Produksi memakai MySQL, sedangkan test PHPUnit berjalan di SQLite
+     * (phpunit.xml), jadi keduanya harus ditangani.
+     */
+    private function monthExpression(string $column): string
+    {
+        return DB::connection()->getDriverName() === 'sqlite'
+            ? "CAST(STRFTIME('%m', {$column}) AS UNSIGNED)"
+            : "MONTH({$column})";
     }
 }

@@ -14,6 +14,8 @@ class StockMovement extends Model
         'product_id',
         'type',
         'quantity',
+        'unit_name',
+        'base_quantity',
         'stock_before',
         'stock_after',
         'reference_type',
@@ -25,6 +27,7 @@ class StockMovement extends Model
 
     protected $casts = [
         'quantity' => 'integer',
+        'base_quantity' => 'integer',
         'stock_before' => 'integer',
         'stock_after' => 'integer',
         'date' => 'date',

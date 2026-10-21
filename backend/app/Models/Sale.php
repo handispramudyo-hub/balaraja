@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Sale extends Model
 {
@@ -45,6 +46,16 @@ class Sale extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);
+    }
+
+    /**
+     * Rencana cicilan, kalau penjualan ini dicicilkan. `HasOne` bukan
+     * `HasMany` karena satu transaksi hanya boleh punya satu tenor; batas itu
+     * dijamin unique index di `installment_plans.sale_id`.
+     */
+    public function installmentPlan(): HasOne
+    {
+        return $this->hasOne(InstallmentPlan::class, 'sale_id');
     }
 
     public function user(): BelongsTo

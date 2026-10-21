@@ -44,15 +44,17 @@ class CustomerController extends Controller
     {
         $customer = Customer::findOrFail($id);
 
-        $totalPurchases   = $customer->purchases()->sum('total') ?? 0;
-        $totalPayments    = $customer->payments()->sum('amount') ?? 0;
-        $totalReceivables = $totalPurchases - $totalPayments;
+        $totalReceivable = Customer::where('id', $id)
+            ->whereHas('sales', function ($q) {
+                $q->whereIn('payment_status', ['unpaid', 'partial']);
+            })
+            ->get()
+            ->sum(fn ($c) => $c->sales->whereIn('payment_status', ['unpaid', 'partial'])->sum('receivable'));
 
         return response()->json([
-            'customer'        => $customer,
-            'total_purchases' => $totalPurchases,
-            'total_payments'  => $totalPayments,
-            'receivables'     => $totalReceivables,
+            'customer'         => $customer,
+            'total_receivable' => $totalReceivable,
+            'sale_count'       => $customer->sales()->count(),
         ]);
     }
 
@@ -79,6 +81,25 @@ class CustomerController extends Controller
     public function destroy($id)
     {
         $customer = Customer::findOrFail($id);
+
+        // MySQL menolak delete ini lewat FK 1451 ketika customer masih terpakai.
+        // Tanpa cek di sini, user melihat error 500 mentah tanpa penjelasan
+        // (log produksi 2026-10-21 penuh dengan QueryException itu).
+        $reasons = [];
+        if ($customer->sales()->exists()) {
+            $reasons[] = $customer->sales()->count() . ' penjualan';
+        }
+        if ($customer->payments()->exists()) {
+            $reasons[] = $customer->payments()->count() . ' pembayaran';
+        }
+        if ($reasons) {
+            return response()->json([
+                'message' => 'Pelanggan tidak bisa dihapus karena masih punya '
+                    . implode(' dan ', $reasons)
+                    . '. Hapus transaksinya dulu.',
+            ], 409);
+        }
+
         $customer->delete();
 
         return response()->json(['message' => 'Customer deleted']);
