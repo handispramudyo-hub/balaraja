@@ -24,15 +24,21 @@ class AuthController extends Controller
 
         if ((string) $user->status !== 'active') {
             Auth::logout();
-            $request->session()->invalidate();
-            $request->session()->regenerateToken();
 
             return response()->json(['message' => 'Akun Anda nonaktif. Hubungi administrator.'], 403);
         }
 
+        // Login ini token-based (Bearer), jadi tidak butuh session. `/api/login`
+        // memakai `statefulApi()` yang HANYA memasang session store ketika
+        // request dianggap stateful (header Origin/Referer + SANCTUM_STATEFUL_
+        // DOMAINS cocok). Memanggil `$request->session()` tanpa syarat membuat
+        // login dari klien non-stateful (curl, mobile) meledak dengan 500
+        // "Session store not set on request".
         Auth::logout();
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
+        if ($request->hasSession()) {
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+        }
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
