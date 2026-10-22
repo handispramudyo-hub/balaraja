@@ -9,6 +9,7 @@ use App\Models\Purchase;
 use App\Models\PurchaseItem;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Models\StockMovement;
 use App\Models\Supplier;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -184,5 +185,30 @@ class MasterDataDeleteGuardTest extends TestCase
             ->assertOk();
 
         $this->assertDatabaseMissing('products', ['id' => $product->id]);
+    }
+
+    /** @test */
+    public function produk_dengan_riwayat_stok_tidak_bisa_dihapus()
+    {
+        // Regresi: produk yang punya baris `stock_movements` ditahan FK
+        // stock_movements_product_id_foreign. Guard awal hanya mengecek
+        // sale_items/purchase_items, sehingga delete meledak 500.
+        $product = $this->product();
+
+        StockMovement::create([
+            'product_id' => $product->id,
+            'type' => 'adjustment',
+            'quantity' => 5,
+            'stock_before' => 100,
+            'stock_after' => 105,
+            'date' => '2026-10-22',
+            'user_id' => $this->user->id,
+        ]);
+
+        $this->auth()->deleteJson("/api/products/{$product->id}")
+            ->assertStatus(409)
+            ->assertJsonStructure(['message']);
+
+        $this->assertDatabaseHas('products', ['id' => $product->id]);
     }
 }

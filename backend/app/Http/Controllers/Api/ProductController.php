@@ -333,8 +333,11 @@ class ProductController extends Controller
     {
         $product = Product::findOrFail($id);
 
-        // Cegah FK 1451 (sale_items / purchase_items / stock_movements) jadi
-        // 500. Cek dulu apa yang menahan produk, lalu tolak dengan 409.
+        // Cegah FK 1451 jadi 500. Cek dulu apa yang menahan produk, lalu tolak
+        // dengan 409. `stock_movements` ikut dicek karena ia yang paling
+        // sering menahan produk: setiap penjualan/pembelian menulis baris
+        // ledger, jadi produk apa pun yang pernah bertransaksi punya jejaknya
+        // dan FK-nya tidak cascade.
         $reasons = [];
         $sales = DB::table('sale_items')->where('product_id', $id)->count();
         if ($sales) {
@@ -343,6 +346,10 @@ class ProductController extends Controller
         $purchases = DB::table('purchase_items')->where('product_id', $id)->count();
         if ($purchases) {
             $reasons[] = $purchases . ' item pembelian';
+        }
+        $movements = DB::table('stock_movements')->where('product_id', $id)->count();
+        if ($movements) {
+            $reasons[] = $movements . ' riwayat stok';
         }
         if ($reasons) {
             return response()->json([
