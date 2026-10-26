@@ -145,7 +145,7 @@ export default function ProductsPage() {
   function openCreate() {
     setEditing(null);
     setForm(initialForm);
-    setUnitRows(toUnitRows([]));
+    setUnitRows([{ ...toUnitRows([])[0], name: 'botol', is_base: true, factor: 1 }, { name: 'dos', factor: 24, is_base: false, buy_price: '', sell_price: '' }]);
     setShowModal(true);
   }
 
@@ -160,7 +160,13 @@ export default function ProductsPage() {
       min_stock: item.min_stock ?? '',
       supplier_id: item.supplier_id ?? '',
     });
-    setUnitRows(toUnitRows(item.units));
+    const normalized = toUnitRows(item.units);
+    const base = normalized.find((u) => u.is_base) || { ...normalized[0], is_base: true, factor: 1 };
+    const pack = normalized.find((u) => !u.is_base) || { name: 'dos', factor: 24, is_base: false, buy_price: '', sell_price: '' };
+    setUnitRows([
+      { ...base, is_base: true, factor: 1 },
+      { ...pack, is_base: false },
+    ]);
     setShowModal(true);
   }
 
@@ -193,12 +199,19 @@ export default function ProductsPage() {
     const base = currentBaseName(editing);
     const isRebasing = Boolean(editing) && changesBaseUnit(units, base);
 
+    const baseRow = units.find((u) => u.is_base) || units[0];
+    const packRow = units.find((u) => !u.is_base) || units[1];
+    const retailBuy = baseRow?.buy_price !== '' && baseRow?.buy_price != null ? Number(baseRow.buy_price) : 0;
+    const packBuy = packRow?.buy_price !== '' && packRow?.buy_price != null ? Number(packRow.buy_price) : 0;
+    const packSize = Number(packRow?.factor) || 1;
+    const retailPrice = baseRow?.sell_price !== '' && baseRow?.sell_price != null ? Number(baseRow.sell_price) : 0;
+
     const payload = {
       name: form.name,
       category_id: form.category_id || null,
       supplier_id: form.supplier_id || null,
-      buy_price: form.buy_price !== '' ? Number(form.buy_price) : 0,
-      sell_price: form.sell_price !== '' ? Number(form.sell_price) : 0,
+      buy_price: retailBuy || (packSize > 0 ? packBuy / packSize : 0),
+      sell_price: retailPrice,
       min_stock: form.min_stock !== '' ? Number(form.min_stock) : 0,
       units,
     };
@@ -542,27 +555,84 @@ export default function ProductsPage() {
                   ))}
                 </Select>
               </FormField>
-              <FormField label="Harga beli">
-                <MoneyInput
-                  value={form.buy_price}
-                  onChange={(value) => setForm({ ...form, buy_price: value })}
+
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <FormField label="Satuan dasar">
+                <Input
+                  value={unitRows[0]?.name || ''}
+                  onChange={(e) => setUnitRows((rows) => {
+                    const next = [...rows];
+                    next[0] = { ...(next[0] || {}), name: e.target.value, is_base: true, factor: 1 };
+                    return next;
+                  })}
+                  placeholder="botol"
+                />
+              </FormField>
+              <FormField label="Satuan kemasan">
+                <Input
+                  value={unitRows[1]?.name || ''}
+                  onChange={(e) => setUnitRows((rows) => {
+                    const next = [...rows];
+                    next[1] = { ...(next[1] || {}), name: e.target.value, is_base: false };
+                    return next;
+                  })}
+                  placeholder="dos"
                 />
               </FormField>
             </div>
 
-            <ProductUnitEditor
-              units={unitRows}
-              onChange={setUnitRows}
-              currentBaseName={currentBaseName(editing)}
-            />
+            <FormField label="Isi per dos (botol)">
+              <Input
+                type="number"
+                min="1"
+                value={unitRows[1]?.factor ?? ''}
+                onChange={(e) => setUnitRows((rows) => {
+                  const next = [...rows];
+                  next[1] = { ...(next[1] || {}), factor: e.target.value, is_base: false };
+                  return next;
+                })}
+                placeholder="24"
+              />
+            </FormField>
 
             <div className="grid grid-cols-2 gap-3">
-              <FormField label="Harga jual">
+              <FormField label="Harga beli per dos">
                 <MoneyInput
-                  value={form.sell_price}
-                  onChange={(value) => setForm({ ...form, sell_price: value })}
+                  value={unitRows[1]?.buy_price ?? ''}
+                  onChange={(value) => setUnitRows((rows) => {
+                    const next = [...rows];
+                    next[1] = { ...(next[1] || {}), buy_price: value, is_base: false };
+                    return next;
+                  })}
                 />
               </FormField>
+              <FormField label="Harga grosir per dos">
+                <MoneyInput
+                  value={unitRows[1]?.sell_price ?? ''}
+                  onChange={(value) => setUnitRows((rows) => {
+                    const next = [...rows];
+                    next[1] = { ...(next[1] || {}), sell_price: value, is_base: false };
+                    return next;
+                  })}
+                />
+              </FormField>
+            </div>
+
+            <FormField label="Harga eceran per botol">
+              <MoneyInput
+                value={unitRows[0]?.sell_price ?? ''}
+                onChange={(value) => setUnitRows((rows) => {
+                  const next = [...rows];
+                  next[0] = { ...(next[0] || {}), sell_price: value, is_base: true, factor: 1 };
+                  return next;
+                })}
+              />
+            </FormField>
+
+            <div className="grid grid-cols-2 gap-3">
+
               <FormField
                 label={`Stok${baseLabel ? ` (${baseLabel})` : ''}`}
                 hint={rebasing ? 'Dihitung otomatis dari rasio satuan' : undefined}
