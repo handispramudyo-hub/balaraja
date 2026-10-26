@@ -332,7 +332,7 @@ export default function ProductsPage() {
       sortable: true,
       render: (item) => (
         <span className="tabular-nums text-on-surface">
-          {Number(item.stock) || 0} {item.base_unit || item.unit || ''}
+          {(function(){const st=Number(item.stock)||0;const base=item.base_unit||item.unit||'';const pack=(item.units||[]).find(u=>!u.is_base);if(pack&&Number(pack.factor)>1){const d=Math.floor(st/Number(pack.factor));const r=st%Number(pack.factor);return d+' '+pack.name+(r? ' + '+r+' '+base:'')+' ('+st+' '+base+')';}return st+' '+base;})()}
         </span>
       ),
     },
@@ -456,7 +456,7 @@ export default function ProductsPage() {
             label: 'Stok',
             render: (item) => (
               <span className="tabular-nums">
-                {Number(item.stock) || 0} {item.base_unit || item.unit || ''}
+                {(function(){const st=Number(item.stock)||0;const base=item.base_unit||item.unit||'';const pack=(item.units||[]).find(u=>!u.is_base);if(pack&&Number(pack.factor)>1){const d=Math.floor(st/Number(pack.factor));const r=st%Number(pack.factor);return d+' '+pack.name+(r? ' + '+r+' '+base:'')+' ('+st+' '+base+')';}return st+' '+base;})()}
               </span>
             ),
           },
