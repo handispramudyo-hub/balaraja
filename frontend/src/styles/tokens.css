@@ -1,0 +1,128 @@
+/* =============================================================================
+   BALARAJA — Design System v2 "Material Ledger"
+   Token warna, tipografi, radius, dan elevasi.
+
+   Aturan main:
+   - Semua token tetap memakai NAMA LAMA supaya halaman yang belum dimigrasi
+     otomatis ikut berubah tampilan tanpa perlu menulis ulang class-nya.
+   - Nilai warna diganti ke palet baru: navy baja + aksen terakota + netral
+     semen hangat. Versi gelap membalik nilai token yang sama (lihat dark.css),
+     jadi komponen tidak perlu tulis `dark:` satu per satu.
+   ========================================================================== */
+
+@theme {
+  /* --- Brand: navy baja --- */
+  --color-primary: #0e2a47;
+  --color-primary-container: #16385e;
+  --color-on-primary: #ffffff;
+  --color-on-primary-container: #a8c6ee;
+  --color-primary-fixed: #d8e6fa;
+  --color-primary-fixed-dim: #aec8ef;
+  --color-on-primary-fixed: #08203b;
+  --color-on-primary-fixed-variant: #2a4670;
+
+  /* --- Aksen terakota (semen/bata): CTA sekunder & penanda --- */
+  --color-accent: #c2410c;
+  --color-accent-container: #ffe8d9;
+  --color-on-accent: #ffffff;
+  --color-on-accent-container: #7c2d12;
+  --color-accent-fixed: #fbd3b4;
+  --color-accent-soft: #fff3ec;
+
+  /* --- Netral semen (hangat, bukan biru-abu) --- */
+  --color-secondary: #5b6068;
+  --color-secondary-container: #e8e6e0;
+  --color-on-secondary: #ffffff;
+  --color-on-secondary-container: #3f434a;
+  --color-secondary-fixed: #f1efea;
+  --color-secondary-fixed-dim: #ddd9d1;
+  --color-on-secondary-fixed: #22262b;
+  --color-on-secondary-fixed-variant: #454a52;
+
+  /* --- Tersier: dipakai untuk aksen non-bahaya --- */
+  --color-tertiary: #7c5800;
+  --color-tertiary-container: #ffdf9e;
+  --color-on-tertiary: #ffffff;
+  --color-on-tertiary-container: #5a3f00;
+  --color-tertiary-fixed: #ffd98a;
+  --color-tertiary-fixed-dim: #f0c268;
+  --color-on-tertiary-fixed: #2b1d00;
+  --color-on-tertiary-fixed-variant: #5a3f00;
+
+  /* --- Galat --- */
+  --color-error: #b42318;
+  --color-error-container: #fee4e2;
+  --color-on-error: #ffffff;
+  --color-on-error-container: #7a271a;
+
+  /* --- Status semantik --- */
+  --color-success: #15803d;
+  --color-success-fixed: #86efac;
+  --color-success-container: #dcfce7;
+  --color-on-success-container: #14532d;
+  --color-warning: #b45309;
+  --color-warning-fixed: #fcd34d;
+  --color-warning-container: #fef3c7;
+  --color-on-warning-container: #78350f;
+  --color-danger: #b91c1c;
+  --color-danger-container: #fee2e2;
+  --color-on-danger-container: #7f1d1d;
+  --color-info: #1d4ed8;
+  --color-info-container: #dbeafe;
+  --color-on-info-container: #1e3a8a;
+
+  /* --- Permukaan --- */
+  --color-surface: #ffffff;
+  --color-surface-dim: #f0efea;
+  --color-surface-bright: #ffffff;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #faf9f6;
+  --color-surface-container: #f4f3ef;
+  --color-surface-container-high: #edebe6;
+  --color-surface-container-highest: #e5e3dd;
+  --color-on-surface: #17191c;
+  --color-on-surface-variant: #4a4e55;
+  --color-surface-variant: #e5e3dd;
+  --color-surface-tint: #0e2a47;
+  --color-background: #f6f5f2;
+  --color-on-background: #17191c;
+
+  /* --- Outline --- */
+  --color-outline: #8a8e96;
+  --color-outline-variant: #d8d5ce;
+
+  /* --- Inverse --- */
+  --color-inverse-surface: #22262b;
+  --color-inverse-on-surface: #f4f3ef;
+  --color-inverse-primary: #aec8ef;
+
+  /* --- Navigasi (sidebar navy) --- */
+  --color-nav: #0b1f36;
+  --color-nav-hover: #14304f;
+  --color-nav-active: #1d4370;
+  --color-nav-border: #1c3a5c;
+  --color-on-nav: #cbd8e8;
+  --color-on-nav-strong: #ffffff;
+
+  /* --- Cetak --- */
+  --color-print-ink: #231f20;
+  --color-print-muted: #9a9a9a;
+  --color-print-paper: #ffffff;
+
+  /* --- Tipografi --- */
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-nota-display: 'Anton', 'Segoe UI', Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Consolas, monospace;
+
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+
+  /* --- Radius --- */
+  --radius-field: 0.625rem;
+  --radius-card: 0.875rem;
+  --radius-modal: 1.125rem;
+
+  /* --- Elevasi (hanya overlay; kartu pakai border, bukan shadow) --- */
+  --shadow-overlay: 0 12px 32px -8px rgb(10 30 51 / 0.18), 0 2px 8px -2px rgb(10 30 51 / 0.08);
+  --shadow-pop: 0 8px 20px -6px rgb(10 30 51 / 0.16), 0 1px 3px rgb(10 30 51 / 0.08);
+}

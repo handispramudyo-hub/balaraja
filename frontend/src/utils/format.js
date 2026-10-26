@@ -1,20 +1,21 @@
+import { formatCurrency as fmtCurrency, formatDate as fmtDate, formatNumber as fmtNumber } from './format';
+
+/**
+ * Titik masuk lama untuk utilitas format.
+ *
+ * Halaman yang sudah ada mengimpor dari `utils/format`. Isi modul ini
+ * sekarang berasal dari `lib/format` supaya hanya ada satu implementasi.
+ */
 export function formatCurrency(number) {
-  if (number == null || isNaN(number)) return 'Rp0';
-  const rounded = Math.round(Number(number));
-  return 'Rp' + rounded.toLocaleString('id-ID');
+  return fmtCurrency(number);
 }
 
 export function formatDate(date) {
-  if (!date) return '';
-  const d = new Date(date);
-  return d.toLocaleDateString('id-ID', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  return fmtDate(date);
 }
 
 export function formatNumber(number) {
-  if (number == null || isNaN(number)) return '0';
-  return Number(number).toLocaleString('id-ID');
+  return fmtNumber(number);
 }
+
+export * from '../lib/format';

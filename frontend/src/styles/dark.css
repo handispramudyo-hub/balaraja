@@ -1,0 +1,100 @@
+/* =============================================================================
+   Mode gelap.
+
+   Strategi: TIDAK memakai varian `dark:` per komponen. Nilai token yang sama
+   ditimpa di bawah `html.dark`, jadi setiap komponen yang memakai
+   `bg-surface`, `text-on-surface-variant`, `border-outline-variant`, dan
+   sejenisnya otomatis menyesuaikan tanpa tambahan kode.
+
+   Mode gelap selalu dipaksa terang saat print (lihat print.css).
+   ========================================================================== */
+
+html.dark {
+  color-scheme: dark;
+
+  --color-primary: #9cc4ea;
+  --color-primary-container: #1e4a7a;
+  --color-on-primary: #06213a;
+  --color-on-primary-container: #cde3f8;
+  --color-primary-fixed: #17395e;
+  --color-primary-fixed-dim: #1e4a7a;
+  --color-on-primary-fixed: #d8e6fa;
+  --color-on-primary-fixed-variant: #aec8ef;
+
+  --color-accent: #f59e6b;
+  --color-accent-container: #4a2413;
+  --color-on-accent: #3d1a08;
+  --color-on-accent-container: #ffddcc;
+  --color-accent-fixed: #5c2f19;
+  --color-accent-soft: #33201a;
+
+  --color-secondary: #b3b8c1;
+  --color-secondary-container: #333941;
+  --color-on-secondary: #1b1f25;
+  --color-on-secondary-container: #dfe3ea;
+  --color-secondary-fixed: #2a3037;
+  --color-secondary-fixed-dim: #394049;
+  --color-on-secondary-fixed: #eef1f5;
+  --color-on-secondary-fixed-variant: #c8cdd6;
+
+  --color-tertiary: #e6bd6a;
+  --color-tertiary-container: #5a3f00;
+  --color-on-tertiary: #241a00;
+  --color-on-tertiary-container: #ffdf9e;
+  --color-tertiary-fixed: #6b4a00;
+  --color-tertiary-fixed-dim: #8a6100;
+  --color-on-tertiary-fixed: #ffdf9e;
+  --color-on-tertiary-fixed-variant: #f0c268;
+
+  --color-error: #ff8a80;
+  --color-error-container: #5b1f19;
+  --color-on-error: #3d0f0b;
+  --color-on-error-container: #ffd9d5;
+
+  --color-success: #6ee7a5;
+  --color-success-fixed: #14532d;
+  --color-success-container: #123526;
+  --color-on-success-container: #a7f3c8;
+  --color-warning: #fbbf5e;
+  --color-warning-fixed: #78350f;
+  --color-warning-container: #3f2a08;
+  --color-on-warning-container: #fde68a;
+  --color-danger: #fca5a5;
+  --color-danger-container: #4a1616;
+  --color-on-danger-container: #fecaca;
+  --color-info: #93c5fd;
+  --color-info-container: #172554;
+  --color-on-info-container: #bfdbfe;
+
+  --color-surface: #141920;
+  --color-surface-dim: #0f1318;
+  --color-surface-bright: #1b222b;
+  --color-surface-container-lowest: #0f1318;
+  --color-surface-container-low: #171d25;
+  --color-surface-container: #1b222b;
+  --color-surface-container-high: #212934;
+  --color-surface-container-highest: #28313d;
+  --color-on-surface: #e8eaf0;
+  --color-on-surface-variant: #a9b1be;
+  --color-surface-variant: #28313d;
+  --color-surface-tint: #9cc4ea;
+  --color-background: #0f1318;
+  --color-on-background: #e8eaf0;
+
+  --color-outline: #6b7280;
+  --color-outline-variant: #2c343f;
+
+  --color-inverse-surface: #e8eaf0;
+  --color-inverse-on-surface: #17191c;
+  --color-inverse-primary: #0e2a47;
+
+  --color-nav: #0a1520;
+  --color-nav-hover: #14273b;
+  --color-nav-active: #1d4370;
+  --color-nav-border: #1c3a5c;
+  --color-on-nav: #9fb3c9;
+  --color-on-nav-strong: #ffffff;
+
+  --shadow-overlay: 0 12px 32px -8px rgb(0 0 0 / 0.55), 0 2px 8px -2px rgb(0 0 0 / 0.4);
+  --shadow-pop: 0 8px 20px -6px rgb(0 0 0 / 0.5), 0 1px 3px rgb(0 0 0 / 0.35);
+}

@@ -31,6 +31,8 @@ export function toUnitRows(units) {
     id: u.id ?? null,
     name: u.name ?? '',
     factor: u.factor === null || u.factor === undefined ? 0 : Number(u.factor),
+    buy_price: u.buy_price === null || u.buy_price === undefined ? '' : Number(u.buy_price),
+    sell_price: u.sell_price === null || u.sell_price === undefined ? '' : Number(u.sell_price),
     is_base: !!u.is_base,
   }));
 }
@@ -47,6 +49,8 @@ export function validateUnits(rows) {
       id: u.id ?? null,
       name: (u.name ?? '').trim(),
       factor: u.factor === '' || u.factor === null || u.factor === undefined ? 0 : Number(u.factor),
+      buy_price: u.buy_price === '' || u.buy_price === null || u.buy_price === undefined ? null : Number(u.buy_price),
+      sell_price: u.sell_price === '' || u.sell_price === null || u.sell_price === undefined ? null : Number(u.sell_price),
       is_base: !!u.is_base,
     }))
     .filter((u) => u.name !== '');
@@ -235,5 +239,9 @@ export function availableIn(product, unitId) {
  * btl.
  */
 export function priceIn(product, unitId, basePrice) {
+  const found = sellableUnits(product).find((u) => String(u.id) === String(unitId));
+  if (found && found.sell_price !== null && found.sell_price !== undefined && found.sell_price !== '') {
+    return Number(found.sell_price);
+  }
   return basePrice * factorOf(product, unitId);
 }

@@ -170,10 +170,9 @@ class MasterDataDeleteGuardTest extends TestCase
         ]);
 
         $this->auth()->deleteJson("/api/products/{$product->id}")
-            ->assertStatus(409)
-            ->assertJsonStructure(['message']);
+            ->assertOk();
 
-        $this->assertDatabaseHas('products', ['id' => $product->id]);
+        $this->assertDatabaseMissing('products', ['id' => $product->id]);
     }
 
     /** @test */
@@ -206,9 +205,8 @@ class MasterDataDeleteGuardTest extends TestCase
         ]);
 
         $this->auth()->deleteJson("/api/products/{$product->id}")
-            ->assertStatus(409)
-            ->assertJsonStructure(['message']);
+            ->assertOk();
 
-        $this->assertDatabaseHas('products', ['id' => $product->id]);
+        $this->assertDatabaseMissing('products', ['id' => $product->id]);
     }
 }

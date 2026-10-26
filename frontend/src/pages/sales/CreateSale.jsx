@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
-import { formatCurrency } from '../../utils/format';
+import { formatCurrency } from '../../lib/format';
 import api from '../../services/api';
 import { toast } from 'sonner';
 import {
@@ -12,6 +12,17 @@ import {
   priceIn,
   sellableUnits,
 } from '../../components/products/unitRules';
+import PageHeader from '../../components/ui/PageHeader';
+import Button from '../../components/ui/Button';
+import IconButton from '../../components/ui/IconButton';
+import Badge from '../../components/ui/Badge';
+import Money from '../../components/ui/Money';
+import FormField from '../../components/ui/FormField';
+import Input from '../../components/ui/Input';
+import Select from '../../components/ui/Select';
+import DateInput from '../../components/ui/DateInput';
+import Textarea from '../../components/ui/Textarea';
+import MoneyInput from '../../components/ui/MoneyInput';
 
 const paymentMethods = [
   { key: 'tunai', label: 'Tunai' },
@@ -239,414 +250,372 @@ export default function CreateSale() {
   };
 
   return (
-    <div className="min-h-screen bg-surface pb-28">
-      <main className="py-4 max-w-md mx-auto space-y-6">
-        {/* Customer & Date */}
-        <section className="bg-surface-container-lowest rounded-xl p-4 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.06)] border border-outline-variant space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-on-surface-variant mb-1">Pelanggan</label>
-            <div className="relative">
-              <select
-                className="w-full h-12 px-3 border border-outline-variant rounded-lg bg-surface focus:border-primary focus:ring-2 focus:ring-primary focus:outline-none appearance-none text-base text-on-surface"
+    <form onSubmit={handleSubmit} className="mx-auto max-w-4xl space-y-4 pb-28 md:pb-6">
+      <PageHeader
+        title={isEdit ? 'Edit Penjualan' : 'Penjualan Baru'}
+        subtitle="Catat barang keluar dan pembayaran dari pelanggan"
+        breadcrumbs={[
+          { label: 'Penjualan', to: '/penjualan' },
+          { label: isEdit ? 'Edit' : 'Tambah' },
+        ]}
+      />
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+        <div className="lg:col-span-2 space-y-4">
+          <section className="rounded-card border border-outline-variant/70 bg-surface-container-lowest p-4 space-y-3.5">
+            <h2 className="text-sm font-semibold text-on-surface">Informasi Transaksi</h2>
+
+            <FormField label="Pelanggan" required>
+              <Select
                 value={form.customer_id}
                 onChange={(e) => setForm((f) => ({ ...f, customer_id: e.target.value }))}
                 required
               >
-                <option value="">Pilih Pelanggan</option>
+                <option value="">Pilih pelanggan</option>
                 {customerList.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
-              </select>
-              <span className="material-symbols-outlined absolute right-3 top-3 text-on-surface-variant pointer-events-none">arrow_drop_down</span>
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-on-surface-variant mb-1">Tanggal Transaksi</label>
-            <input
-              className="w-full h-12 px-3 border border-outline-variant rounded-lg bg-surface focus:border-primary focus:ring-2 focus:ring-primary focus:outline-none text-base text-on-surface"
-              type="date"
-              value={form.date}
-              onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-on-surface-variant mb-1">Jatuh Tempo (Opsional)</label>
-            <input
-              className="w-full h-12 px-3 border border-outline-variant rounded-lg bg-surface focus:border-primary focus:ring-2 focus:ring-primary focus:outline-none text-base text-on-surface"
-              type="date"
-              value={form.due_date}
-              onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))}
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-on-surface-variant mb-1">Catatan</label>
-            <textarea
-              className="w-full px-3 py-3 border border-outline-variant rounded-lg bg-surface focus:border-primary focus:ring-2 focus:ring-primary focus:outline-none text-base text-on-surface"
-              placeholder="Catatan opsional..."
-              rows="2"
-              value={form.notes}
-              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-            />
-          </div>
-        </section>
+              </Select>
+            </FormField>
 
-        {/* Items Section */}
-        <section className="space-y-4">
-          <h2 className="text-xl font-semibold text-primary">Detail Barang</h2>
-
-          {form.items.length === 0 ? (
-            <div className="text-center py-12">
-              <span className="material-symbols-outlined text-5xl text-on-surface-variant/40 mb-2 block">inventory_2</span>
-              <p className="text-sm text-on-surface-variant mb-4">Belum ada item ditambahkan</p>
-              <button
-                type="button"
-                onClick={addItem}
-                className="w-full h-12 border-2 border-dashed border-outline text-on-surface-variant rounded-xl text-xs font-medium flex items-center justify-center gap-2 hover:bg-surface-container-highest hover:border-primary hover:text-primary transition-all"
-              >
-                <span className="material-symbols-outlined">add_circle</span> Tambah Barang Lain
-              </button>
-            </div>
-          ) : (
-            <>
-              {form.items.map((item, idx) => {
-                const product = productList.find((p) => p.id === Number(item.product_id));
-                const unitOptions = sellableUnits(product);
-                const selectedUnit =
-                  unitOptions.find((u) => String(u.id) === String(item.unit_id)) ||
-                  baseUnitOfProduct(product);
-                const factor = factorOf(product, item.unit_id);
-                const isOverStock =
-                  product && (Number(item.quantity) || 0) * factor > (Number(product.stock) || 0);
-                const subtotal = (Number(item.quantity) || 0) * (Number(item.sell_price) || 0);
-                return (
-                  <div
-                    key={idx}
-                    className={`bg-surface-container-lowest rounded-xl p-4 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.06)] border ${isOverStock ? 'border-error rounded-lg bg-error-container/20' : 'border-outline-variant'}`}
-                  >
-                    <div className="flex justify-between items-start mb-3">
-                      <div className="flex gap-3 items-center">
-                        <div className="w-12 h-12 rounded-lg bg-surface-container-high flex items-center justify-center overflow-hidden">
-                          <span className="material-symbols-outlined text-on-surface-variant">
-                            {product?.image_url ? 'image' : 'inventory_2'}
-                          </span>
-                        </div>
-                        <div>
-                          <h3 className="text-base font-semibold text-on-surface">
-                            {product?.name || 'Pilih Produk'}
-                          </h3>
-                          <p className="text-sm text-on-surface-variant">
-                            {product
-                              ? `Stok: ${availableIn(product, item.unit_id)} ${selectedUnit?.name || ''}`
-                              : 'Pilih produk untuk melihat stok'}
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeItem(idx)}
-                        className="text-error p-1 hover:bg-error-container rounded-full transition-colors"
-                      >
-                        <span className="material-symbols-outlined">delete</span>
-                      </button>
-                    </div>
-
-                    {/* Product select */}
-                    <div className="mb-3">
-                      <label className="block text-xs font-medium text-on-surface-variant mb-1">Produk</label>
-                      <select
-                        value={item.product_id}
-                        onChange={(e) => updateItem(idx, 'product_id', e.target.value)}
-                        className="w-full h-12 px-3 border border-outline-variant rounded-lg bg-surface focus:border-primary focus:ring-2 focus:ring-primary focus:outline-none text-base text-on-surface appearance-none"
-                        required
-                      >
-                        <option value="">Pilih Produk</option>
-                        {productList.map((p) => (
-                          <option key={p.id} value={p.id}>{p.name}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {unitOptions.length > 1 && (
-                      <div className="mb-3">
-                        <label className="block text-xs font-medium text-on-surface-variant mb-1">
-                          Satuan Jual
-                        </label>
-                        <select
-                          value={item.unit_id === '' ? String(selectedUnit?.id ?? '') : item.unit_id}
-                          onChange={(e) => updateItem(idx, 'unit_id', e.target.value)}
-                          className="w-full h-12 px-3 border border-outline-variant rounded-lg bg-surface focus:border-primary focus:ring-2 focus:ring-primary focus:outline-none text-base text-on-surface appearance-none"
-                        >
-                          {unitOptions.map((u) => (
-                            <option key={u.id ?? 'base'} value={u.id ?? ''}>
-                              {u.name}
-                              {u.is_base ? ' (satuan dasar)' : ` (1 ${u.name} = ${u.factor} ${baseUnitOfProduct(product)?.name || ''})`}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-2 gap-3 mb-3">
-                      <div>
-                        <label className="block text-xs font-medium text-on-surface-variant mb-1">
-                          Kuantitas
-                          {selectedUnit && !selectedUnit.is_base && (
-                            <span className="font-normal"> ({selectedUnit.name})</span>
-                          )}
-                        </label>
-                        <input
-                          className={`w-full h-12 px-3 border rounded-lg bg-surface focus:ring-2 focus:outline-none text-base text-on-surface text-right ${isOverStock ? 'border-error focus:border-error focus:ring-error' : 'border-outline-variant focus:border-primary focus:ring-primary'}`}
-                          type="number"
-                          min="1"
-                          value={item.quantity}
-                          onChange={(e) => updateItem(idx, 'quantity', e.target.value)}
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-on-surface-variant mb-1">
-                          Harga per {selectedUnit?.name || 'satuan'}
-                        </label>
-                        <input
-                          className="w-full h-12 px-3 border border-outline-variant rounded-lg bg-surface focus:border-primary focus:ring-2 focus:ring-primary focus:outline-none text-base text-on-surface text-right"
-                          type="number"
-                          min="0"
-                          value={item.sell_price}
-                          onChange={(e) => updateItem(idx, 'sell_price', e.target.value)}
-                          required
-                        />
-                      </div>
-                    </div>                    <div className="flex justify-between items-center border-t border-outline-variant pt-3">
-                      <span className="text-xs font-medium text-on-surface-variant">Subtotal</span>
-                      <span className="text-lg font-semibold text-on-surface">{formatCurrency(subtotal)}</span>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {/* Stock Warnings */}
-              {stockWarnings.length > 0 && (
-                <div className="bg-tertiary-fixed text-on-tertiary-fixed p-2 rounded-lg flex items-center gap-2 mb-3">
-                  <span className="material-symbols-outlined text-tertiary-container" style={{ fontVariationSettings: "'FILL' 1" }}>warning</span>
-                  <span className="text-xs font-medium">
-                    Peringatan Stok: {stockWarnings.map((w) => `${w.name} (total ${w.requested} ${w.unitName}, tersedia ${w.available})`).join(', ')}
-                  </span>
-                </div>
-              )}
-
-              {/* Add Item Button */}
-              <button
-                type="button"
-                onClick={addItem}
-                className="w-full h-12 border-2 border-dashed border-outline text-on-surface-variant rounded-xl text-xs font-medium flex items-center justify-center gap-2 hover:bg-surface-container-highest hover:border-primary hover:text-primary transition-all"
-              >
-                <span className="material-symbols-outlined">add_circle</span> Tambah Barang Lain
-              </button>
-            </>
-          )}
-        </section>
-
-        {/* Payment Section */}
-        <section className="bg-surface-container-lowest rounded-xl p-4 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.06)] border border-outline-variant space-y-4">
-          <h2 className="text-xl font-semibold text-primary mb-2">Pembayaran</h2>
-
-          {/* Summary */}
-          <div className="bg-surface-container rounded-lg p-3 space-y-2">
-            <div className="flex justify-between text-sm text-on-surface-variant">
-              <span>Total Barang ({form.items.length})</span>
-              <span>{formatCurrency(total)}</span>
-            </div>
-            <div className="flex justify-between text-lg font-semibold text-primary border-t border-outline-variant pt-2">
-              <span>Total Tagihan</span>
-              <span>{formatCurrency(total)}</span>
-            </div>
-          </div>
-
-          {/* Cicilan / Tunai */}
-          {!isEdit && (
-            <div>
-              <label className="block text-xs font-medium text-on-surface-variant mb-2">Cara Bayar</label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setForm((f) => ({ ...f, installment_months: '' }))}
-                  className={`h-10 rounded-lg text-xs font-medium transition-colors ${
-                    !form.installment_months
-                      ? 'border border-primary bg-primary text-on-primary'
-                      : 'border border-outline-variant bg-surface text-on-surface'
-                  }`}
-                >
-                  Bayar Penuh
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setForm((f) => ({ ...f, installment_months: f.installment_months || 3 }))
-                  }
-                  className={`h-10 rounded-lg text-xs font-medium transition-colors ${
-                    form.installment_months
-                      ? 'border border-primary bg-primary text-on-primary'
-                      : 'border border-outline-variant bg-surface text-on-surface'
-                  }`}
-                >
-                  Cicilan
-                </button>
-              </div>
-            </div>
-          )}
-
-          {form.installment_months ? (
-            <div>
-              <label className="block text-xs font-medium text-on-surface-variant mb-1">
-                Jumlah Angsuran (bulan)
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="36"
-                step="1"
-                value={form.installment_months}
-                onChange={(e) => setForm((f) => ({ ...f, installment_months: e.target.value }))}
-                className="w-full h-12 px-3 border border-outline-variant rounded-lg bg-surface focus:border-primary focus:ring-2 focus:ring-primary focus:outline-none text-base text-on-surface"
-              />
-              <p className="text-xs text-on-surface-variant mt-1">
-                {total > 0 && Number(form.installment_months) > 0 ? (
-                  <>
-                    Sekitar{' '}
-                    <strong className="text-on-surface">
-                      {formatCurrency(
-                        Math.floor((total / Number(form.installment_months)) * 100) / 100,
-                      )}{' '}
-                      per bulan
-                    </strong>
-                    , angsuran pertama jatuh tempo 1 bulan dari tanggal transaksi. Sisa pembulatan
-                    masuk ke angsuran terakhir.
-                  </>
-                ) : (
-                  'Angsuran pertama jatuh tempo 1 bulan dari tanggal transaksi.'
-                )}
-              </p>
-            </div>
-          ) : (
-            <>
-              {/* Payment Method Toggle */}
-              <div>
-                <label className="block text-xs font-medium text-on-surface-variant mb-2">
-                  Metode Pembayaran
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {paymentMethods.map((m) => (
-                    <button
-                      key={m.key}
-                      type="button"
-                      onClick={() => {
-                        setForm((f) => {
-                          const updated = { ...f, payment_method: m.key };
-                          if (m.key === 'tunai') updated.amount_paid = String(total);
-                          return updated;
-                        });
-                      }}
-                      className={`h-10 rounded-lg text-xs font-medium flex items-center justify-center transition-colors ${
-                        form.payment_method === m.key
-                          ? 'border border-primary bg-primary text-on-primary'
-                          : 'border border-outline-variant bg-surface text-on-surface hover:bg-surface-container-high'
-                      }`}
-                    >
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Amount Paid */}
-              <div>
-                <label className="block text-xs font-medium text-on-surface-variant mb-1">
-                  Jumlah Dibayar (Rp)
-                </label>
-                <input
-                  className="w-full h-12 px-3 border border-outline-variant rounded-lg bg-surface focus:border-primary focus:ring-2 focus:ring-primary focus:outline-none text-xl font-semibold text-on-surface text-right"
-                  type="number"
-                  min="0"
-                  value={form.amount_paid}
-                  onChange={(e) => setForm((f) => ({ ...f, amount_paid: e.target.value }))}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FormField label="Tanggal Transaksi" required>
+                <DateInput
+                  value={form.date}
+                  onChange={(value) => setForm((f) => ({ ...f, date: value }))}
+                  required
                 />
-              </div>
-            </>
-          )}
+              </FormField>
+              <FormField
+                label="Jatuh Tempo"
+                hint="Kosongkan kalau dibayar lunas sekarang."
+              >
+                <DateInput
+                  value={form.due_date}
+                  onChange={(value) => setForm((f) => ({ ...f, due_date: value }))}
+                />
+              </FormField>
+            </div>
 
-          {/* Remaining Balance / Lunas */}
-          {/* Sisa / Lunas. Saat cicilan aktif, "sisa" sudah punya
-              jadwal sendiri - menampilkan sisa di sini akan
-              mengulang angka yang sama dalam bentuk berbeda. */}
-          {!form.installment_months &&
-            (remainingBalance > 0 ? (
-              <div className="flex justify-between items-center p-3 bg-error-container/20 rounded-lg border border-error-container">
-                <span className="text-xs font-medium text-error">Sisa Kekurangan</span>
-                <span className="text-lg font-semibold text-error">{formatCurrency(remainingBalance)}</span>
+            <FormField label="Catatan">
+              <Textarea
+                value={form.notes}
+                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                placeholder="Opsional"
+                rows={2}
+              />
+            </FormField>
+          </section>
+
+          <section className="rounded-card border border-outline-variant/70 bg-surface-container-lowest p-4 space-y-3.5">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-on-surface">Detail Barang</h2>
+              <Badge tone="neutral" size="sm">
+                {form.items.length} item
+              </Badge>
+            </div>
+
+            {stockWarnings.length > 0 && (
+              <div className="flex items-start gap-2 rounded-field border border-warning-container bg-warning-container/40 px-3 py-2">
+                <span className="material-symbols-outlined text-base text-on-warning-container" aria-hidden="true">
+                  warning
+                </span>
+                <p className="text-xs text-on-warning-container">
+                  Stok tidak cukup: {stockWarnings.map((w) => `${w.name} (butuh ${w.requested} ${w.unitName}, tersedia ${w.available})`).join(', ')}
+                </p>
+              </div>
+            )}
+
+            {form.items.length === 0 ? (
+              <div className="rounded-field border border-dashed border-outline-variant bg-surface-container-low px-4 py-8 text-center">
+                <span className="material-symbols-outlined text-2xl text-outline" aria-hidden="true">
+                  inventory_2
+                </span>
+                <p className="mt-1 text-sm text-on-surface">Belum ada item</p>
+                <p className="text-xs text-on-surface-variant">
+                  Klik “Tambah Item” untuk menambahkan barang yang dijual.
+                </p>
               </div>
             ) : (
-              <div className="flex justify-between items-center p-3 bg-success-container rounded-lg border border-success-fixed">
-                <span className="text-xs font-medium text-on-success-container">Lunas</span>
-                <span className="text-lg font-semibold text-on-success-container">Rp 0</span>
-              </div>
-            ))}
+              <div className="space-y-3">
+                {form.items.map((item, idx) => {
+                  const product = productList.find((p) => p.id === Number(item.product_id));
+                  const unitOptions = sellableUnits(product);
+                  const selectedUnit =
+                    unitOptions.find((u) => String(u.id) === String(item.unit_id)) ||
+                    baseUnitOfProduct(product);
+                  const factor = factorOf(product, item.unit_id);
+                  const isOverStock =
+                    product && (Number(item.quantity) || 0) * factor > (Number(product.stock) || 0);
+                  const subtotal = (Number(item.quantity) || 0) * (Number(item.sell_price) || 0);
 
-          {/* Jatuh Tempo. Tidak relevan kalau sudah ada jadwal angsuran -
-              setiap angsuran punya jatuh tempo sendiri. */}
-          {remainingBalance > 0 && !form.installment_months && (
-            <div>
-              <label className="block text-xs font-medium text-on-surface-variant mb-1">
-                Jatuh Tempo Pembayaran
-              </label>
-              <input
-                className="w-full h-12 px-3 border border-outline-variant rounded-lg bg-surface focus:border-primary focus:ring-2 focus:ring-primary focus:outline-none text-base text-on-surface"
-                type="date"
-                value={form.due_date}
-                onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))}
-              />
+                  return (
+                    <div
+                      key={idx}
+                      className={`relative rounded-field border p-3 space-y-3 ${
+                        isOverStock
+                          ? 'border-danger/50 bg-danger-container/20'
+                          : 'border-outline-variant/70 bg-surface-container-low/40'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-2xs font-medium uppercase tracking-wide text-on-surface-variant">
+                          Item {idx + 1}
+                        </span>
+                        <IconButton
+                          icon="delete"
+                          label={`Hapus item ${idx + 1}`}
+                          size="sm"
+                          tone="danger"
+                          onClick={() => removeItem(idx)}
+                        />
+                      </div>
+
+                      <FormField label="Produk" required>
+                        <Select
+                          value={item.product_id}
+                          onChange={(e) => updateItem(idx, 'product_id', e.target.value)}
+                          required
+                        >
+                          <option value="">Pilih produk</option>
+                          {productList.map((p) => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                        </Select>
+                      </FormField>
+
+                      {unitOptions.length > 1 && (
+                        <FormField label="Satuan Jual">
+                          <Select
+                            value={item.unit_id === '' ? String(selectedUnit?.id ?? '') : item.unit_id}
+                            onChange={(e) => updateItem(idx, 'unit_id', e.target.value)}
+                          >
+                            {unitOptions.map((u) => (
+                              <option key={u.id ?? 'base'} value={u.id ?? ''}>
+                                {u.name}
+                                {u.is_base
+                                  ? ` (${baseUnitOfProduct(product)?.name || 'satuan dasar'})`
+                                  : ` (1 ${u.name} = ${u.factor} ${baseUnitOfProduct(product)?.name || 'satuan dasar'})`}
+                              </option>
+                            ))}
+                          </Select>
+                        </FormField>
+                      )}
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <FormField
+                          label={`Qty${selectedUnit && !selectedUnit.is_base ? ` (${selectedUnit.name})` : ''}`}
+                          error={isOverStock ? 'Melebihi stok' : undefined}
+                        >
+                          <Input
+                            type="number"
+                            min="1"
+                            value={item.quantity}
+                            onChange={(e) => updateItem(idx, 'quantity', e.target.value)}
+                            invalid={isOverStock}
+                            required
+                          />
+                        </FormField>
+                        <FormField label={`Harga per ${selectedUnit?.name || 'satuan'}`}>
+                          <Input
+                            type="number"
+                            min="0"
+                            value={item.sell_price}
+                            onChange={(e) => updateItem(idx, 'sell_price', e.target.value)}
+                            required
+                          />
+                        </FormField>
+                      </div>
+
+                      {product && (
+                        <p className="text-2xs text-on-surface-variant">
+                          Stok tersedia {availableIn(product, item.unit_id)} {selectedUnit?.name || ''}
+                          {factorOf(product, item.unit_id) > 1 && (
+                            <> ({product.stock} {baseUnitOfProduct(product)?.name})</>
+                          )}
+                        </p>
+                      )}
+
+                      <div className="flex items-center justify-between border-t border-outline-variant/50 pt-2">
+                        <span className="text-xs font-medium text-on-surface-variant">Subtotal</span>
+                        <Money value={subtotal} variant="strong" className="text-sm" />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <Button type="button" variant="outline" icon="add" fullWidth onClick={addItem}>
+              Tambah Item
+            </Button>
+          </section>
+        </div>
+
+        <aside className="space-y-4 lg:sticky lg:top-4">
+          <section className="rounded-card border border-outline-variant/70 bg-surface-container-lowest p-4 space-y-3.5">
+            <h2 className="text-sm font-semibold text-on-surface">Pembayaran</h2>
+
+            <div className="rounded-field bg-surface-container px-3 py-2.5 space-y-1.5">
+              <div className="flex items-center justify-between text-xs text-on-surface-variant">
+                <span>Total barang ({form.items.length})</span>
+                <span className="tabular-nums">{formatCurrency(total)}</span>
+              </div>
+              <div className="flex items-center justify-between border-t border-outline-variant/60 pt-2">
+                <span className="text-sm font-semibold text-on-surface">Total Tagihan</span>
+                <Money value={total} variant="strong" className="text-base text-primary" />
+              </div>
             </div>
-          )}
 
-          {/* Ringkasan cicilan, menggantikan field di atas. */}
-          {form.installment_months && total > 0 && Number(form.installment_months) > 0 && (
-            <div className="p-3 bg-primary-container/20 rounded-lg border border-primary-container space-y-1">
-              <div className="flex justify-between text-sm">
-                <span className="text-on-surface-variant">Total dicicilkan</span>
-                <span className="font-semibold text-on-surface">{formatCurrency(total)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-on-surface-variant">Jumlah angsuran</span>
-                <span className="font-semibold text-on-surface">{form.installment_months} bulan</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-on-surface-variant">Angsuran pertama</span>
-                <span className="font-semibold text-on-surface">
-                  {formatCurrency(Math.floor((total / Number(form.installment_months)) * 100) / 100)}
-                </span>
-              </div>
-              <p className="text-xs text-on-surface-variant pt-1">
-                Jadwal lengkap bisa dilihat di menu Angsuran setelah transaksi disimpan.
-              </p>
-            </div>
-          )}
-        </section>
-      </main>
+            {!isEdit && (
+              <FormField label="Cara Bayar">
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={!form.installment_months ? 'primary' : 'outline'}
+                    onClick={() => setForm((f) => ({ ...f, installment_months: '' }))}
+                  >
+                    Bayar Penuh
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={form.installment_months ? 'primary' : 'outline'}
+                    onClick={() =>
+                      setForm((f) => ({ ...f, installment_months: f.installment_months || 3 }))
+                    }
+                  >
+                    Cicilan
+                  </Button>
+                </div>
+              </FormField>
+            )}
 
-      {/* Fixed Bottom */}
-      <div className="fixed w-full bg-surface border-t border-outline-variant p-4 z-40 create-bottom-bar">
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={mutation.isPending}
-          className="w-full h-12 bg-primary text-on-primary rounded-xl text-lg font-semibold shadow-sm hover:bg-primary-container hover:text-on-primary-container transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-        >
-          <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>
-            {mutation.isPending ? 'progress_activity' : 'save'}
-          </span>
-          {mutation.isPending ? 'Menyimpan...' : (isEdit ? 'Update Penjualan' : 'Simpan Penjualan')}
-        </button>
+            {form.installment_months ? (
+              <>
+                <FormField
+                  label="Jumlah Angsuran (bulan)"
+                  hint={
+                    total > 0 && Number(form.installment_months) > 0
+                      ? `Sekitar ${formatCurrency(
+                          Math.floor((total / Number(form.installment_months)) * 100) / 100
+                        )} per bulan. Angsuran pertama jatuh tempo 1 bulan dari tanggal transaksi.`
+                      : 'Angsuran pertama jatuh tempo 1 bulan dari tanggal transaksi.'
+                  }
+                >
+                  <Input
+                    type="number"
+                    min="1"
+                    max="36"
+                    step="1"
+                    value={form.installment_months}
+                    onChange={(e) => setForm((f) => ({ ...f, installment_months: e.target.value }))}
+                  />
+                </FormField>
+
+                {total > 0 && Number(form.installment_months) > 0 && (
+                  <div className="rounded-field border border-primary-container/60 bg-primary-container/20 px-3 py-2.5 space-y-1 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-on-surface-variant">Total dicicilkan</span>
+                      <Money value={total} variant="strong" />
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-on-surface-variant">Jumlah angsuran</span>
+                      <span className="font-semibold text-on-surface">{form.installment_months} bulan</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-on-surface-variant">Angsuran pertama</span>
+                      <Money
+                        value={Math.floor((total / Number(form.installment_months)) * 100) / 100}
+                        variant="strong"
+                      />
+                    </div>
+                    <p className="pt-1 text-on-surface-variant">
+                      Jadwal lengkap tersedia di menu Angsuran setelah transaksi disimpan.
+                    </p>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                {!isEdit && (
+                  <>
+                    <FormField label="Metode Pembayaran">
+                      <div className="grid grid-cols-3 gap-2">
+                        {paymentMethods.map((m) => (
+                          <Button
+                            key={m.key}
+                            type="button"
+                            size="sm"
+                            variant={form.payment_method === m.key ? 'primary' : 'outline'}
+                            onClick={() => {
+                              setForm((f) => {
+                                const updated = { ...f, payment_method: m.key };
+                                if (m.key === 'tunai') updated.amount_paid = String(total);
+                                return updated;
+                              });
+                            }}
+                          >
+                            {m.label}
+                          </Button>
+                        ))}
+                      </div>
+                    </FormField>
+
+                    <FormField label="Jumlah Dibayar">
+                      <MoneyInput
+                        value={form.amount_paid}
+                        onChange={(value) => setForm((f) => ({ ...f, amount_paid: value }))}
+                      />
+                    </FormField>
+                  </>
+                )}
+
+                {remainingBalance > 0 ? (
+                  <div className="flex items-center justify-between rounded-field border border-danger-container bg-danger-container/30 px-3 py-2.5">
+                    <span className="text-xs font-medium text-danger">Sisa Kekurangan</span>
+                    <Money value={remainingBalance} variant="danger" className="text-sm" />
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between rounded-field border border-success-container bg-success-container px-3 py-2.5">
+                    <span className="text-xs font-medium text-on-success-container">Lunas</span>
+                    <span className="text-sm font-semibold text-on-success-container">Rp0</span>
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+
+          <div className="hidden lg:flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              fullWidth
+              onClick={() => navigate('/penjualan')}
+            >
+              Batal
+            </Button>
+            <Button type="submit" fullWidth loading={mutation.isPending}>
+              {isEdit ? 'Update Penjualan' : 'Simpan Penjualan'}
+            </Button>
+          </div>
+        </aside>
       </div>
-    </div>
+
+      <div className="lg:hidden fixed left-0 w-full bg-surface border-t border-outline-variant/70 p-3 flex gap-2 create-bottom-bar z-40">
+        <Button
+          type="button"
+          variant="outline"
+          fullWidth
+          onClick={() => navigate('/penjualan')}
+        >
+          Batal
+        </Button>
+        <Button type="submit" fullWidth loading={mutation.isPending}>
+          {isEdit ? 'Update' : 'Simpan'}
+        </Button>
+      </div>
+    </form>
   );
 }

@@ -1,0 +1,105 @@
+/* =============================================================================
+   Utilitas layout & shell.
+
+   `desktop-sidebar`, `mobile-bottom-nav`, `mobile-sub-nav`,
+   `main-content-desktop`, dan `create-bottom-bar` adalah kelas yang sudah
+   dipakai halaman lama. Aturannya dipindah ke sini supaya file token tetap
+   bersih, dan supaya shell baru (tab bar + drawer) bisa memakai kelas yang
+   sama.
+   ========================================================================== */
+
+/* Sidebar desktop: tersembunyi di mobile, tampil di md+ */
+.desktop-sidebar {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .desktop-sidebar {
+    display: flex;
+  }
+}
+
+/* Navigasi bawah mobile */
+.mobile-bottom-nav {
+  display: flex;
+}
+
+@media (min-width: 768px) {
+  .mobile-bottom-nav {
+    display: none;
+  }
+}
+
+/* Sub-nav horizontal lama (chip strip) — disembunyikan di shell baru. */
+.mobile-sub-nav {
+  display: none;
+}
+
+/* Konten utama: tanpa margin kiri di mobile, sisakan ruang untuk tab bar */
+.main-content-desktop {
+  margin-left: 0;
+  padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 768px) {
+  .main-content-desktop {
+    margin-left: 17rem;
+    padding-bottom: 1.5rem;
+  }
+}
+
+/* Bar bawah halaman create: menyingkir dari tab bar mobile */
+.create-bottom-bar {
+  bottom: 0;
+}
+
+@media (max-width: 767px) {
+  .create-bottom-bar {
+    bottom: calc(4.25rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Cincin fokus keyboard — dipakai seluruh kontrol interaktif. */
+.focus-ring:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Target sentuh minimal 44px di layar sentuh. */
+@media (pointer: coarse) {
+  .touch-target {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* Kursor 'wait' saat ada aksi berjalan. */
+.cursor-busy {
+  cursor: progress;
+}
+
+/* Baris tabel yang bisa diklik */
+.row-clickable {
+  cursor: pointer;
+}
+
+.row-clickable:hover {
+  background: var(--color-surface-container-low);
+}
+
+/* Scroll area tabel desktop: header lengket */
+.sticky-head thead th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+/* Pembatas tipis antar baris */
+.hairline {
+  border-color: color-mix(in srgb, var(--color-outline-variant) 60%, transparent);
+}
+
+/* Latar zebra lembut untuk tabel padat */
+.zebra tbody tr:nth-child(even) {
+  background: color-mix(in srgb, var(--color-surface-container-low) 60%, transparent);
+}

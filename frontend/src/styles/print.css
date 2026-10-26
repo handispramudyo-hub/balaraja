@@ -1,0 +1,534 @@
+﻿/* =============================================================================
+   Aturan cetak.
+
+   Isi file ini PINDAH dari index.css tanpa perubahan perilaku: laporan A4,
+   kop/kaki halaman, nota kontan 105x165mm, dan pemotongan kolom supaya tidak
+   ada kolom yang hilang di tepi kanan kertas.
+
+   Catatan penting: mode gelap dipaksa terang di sini, karena laporan dan nota
+   selalu dicetak di kertas putih.
+   ========================================================================== */
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  .print-area {
+    display: block !important;
+  }
+}
+
+/* Aturan layout shell (sidebar, tab bar, konten utama) dipindah ke
+   styles/utilities.css supaya hanya ada satu sumber untuk aturan itu.
+   Di bawah ini hanya sisanya: penanda cetak dan band nota kontan. */
+
+/* Print nota kontan */
+.print-only {
+  display: none;
+}
+@media print {
+  .print-only {
+    display: block;
+  }
+}
+
+.nk-top-band,
+.nk-bottom-band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3.5mm;
+  background: #231F20;
+}
+.nk-top-band {
+  top: 0;
+}
+.nk-bottom-band {
+  bottom: 0;
+}
+
+/* ===== Print ===== */
+@media print {
+  @page {
+    size: A4;
+    /* Margin bawah 20mm, bukan 15mm. Lihat catatan @bottom-* di bawah. */
+    margin: 15mm 15mm 20mm;
+
+    /* Kaki halaman diletakkan DI DALAM margin @page, bukan sebagai elemen
+       position: fixed di dalam area konten.
+
+       position: fixed terlihat lebih sederhana, tapi ia gagal untuk dua
+       alasan: ia tidak memesan ruang di flow, sehingga baris tabel terakhir
+       selalu bisa mengalir tepat di atas kaki halaman; dan kalau diberi
+       offset negatif (bottom: -14mm) supaya masuk ke margin, Chrome
+       menaruhnya di BAWAH area konten - yaitu keluar kertas - lalu
+       mengulangnya mulai halaman berikutnya, sehingga kaki halaman muncul
+       di bagian ATAS halaman 2.
+
+       @bottom-* tidak punya dua masalah itu: isinya otomatis berada di
+       margin tiap halaman, jadi tidak mungkin bertabrakan dengan konten,
+       dan tidak pernah bisa keluar area cetak. */
+    @bottom-left {
+      content: 'Hanya untuk keperluan internal';
+      font-size: 9px;
+      color: #6b7280;
+      vertical-align: top;
+      padding-top: 2mm;
+    }
+    @bottom-right {
+      content: 'Dicetak dari Sistem BALARAJA - Hal. ' counter(page);
+      font-size: 9px;
+      color: #6b7280;
+      vertical-align: top;
+      padding-top: 2mm;
+    }
+  }
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* UI chrome, modal, tombol & filter tidak ikut tercetak */
+  .no-print,
+  .no-print * {
+    display: none !important;
+  }
+
+  /* Ikon Material Symbols tidak bisa diandalkan saat print: font ligaturnya
+     datang dari CDN dan tidak selalu ikut ter-embed, sehingga teks mentahnya
+     ("check_circle", "schedule", "expand_more") tercetak utuh di kertas.
+     Semua ikon di aplikasi selalu berdampingan dengan label teks, jadi
+     menyembunyikannya di print tidak menghilangkan informasi. */
+  .material-symbols-outlined {
+    display: none !important;
+  }
+
+  /* Rilat & nav khusus layar. Tanpa aturan ini, query min-width:768px tidak
+     cocok di kertas (area A4 margin 15mm ï¿½%^ 680px), sehingga
+     .main-content-desktop memakai padding-bottom 5.5rem ï¿½+' 88px kosong
+     di kaki setiap halaman. */
+
+  .desktop-sidebar,
+  .mobile-bottom-nav,
+  .mobile-sub-nav,
+  .create-bottom-bar {
+    display: none !important;
+  }
+  .main-content-desktop {
+    margin-left: 0 !important;
+    padding-bottom: 0 !important;
+  }
+
+  /* Nota kontan: hanya salinan .print-isolated yang dicetak, sisanya
+     disembunyikan. Kunci scoping WAJIB .print-isolated, bukan .print-only:
+     PrintHeader/PrintFooter di 6 halaman laporan juga memakai .print-only,
+     sehingga body:has(.print-only) ikut cocok dan membuat SELURUH isi
+     laporan `visibility: hidden` â€” yang tercetak hanya kop & kaki. */
+  body:has(.print-isolated) * {
+    visibility: hidden !important;
+  }
+  body:has(.print-isolated) .print-isolated,
+  body:has(.print-isolated) .print-isolated * {
+    visibility: visible !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .print-nota-kontan {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Laporan: lepaskan dari container scroll agar tabel panjang
+     bisa halaman baru dengan header yang berulang. */
+  .print-area {
+    position: static !important;
+    inset: auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+  /* @page A4 margin 15mm â‰ˆ 680px, di BAWAH breakpoint md (768px).
+     Tanpa aturan ini `md:` tidak cocok saat print, jadi yang tercetak
+     adalah daftar kartu mobile, bukan tabel. */
+  .print-table-wrap {
+    display: block !important;
+  }
+  .print-card-list {
+    display: none !important;
+  }
+  .print-area table {
+    width: 100% !important;
+    /* min-width di-inline-style (ResponsiveTable), jadi harus !important */
+    min-width: 0 !important;
+  }
+  /* Padding sel p-3 (12px) di 8 kolom memakan ~200px, lebih lebar dari
+     kolom yang paling berisi. Diturunkan supaya laporan 8 kolom muat di area
+     cetak A4 portrait 680px tanpa kolom Status terpotong jadi "Sta".
+     Angka uang juga diperkecil: 3 kolom rupiah butuh ~88px per kolom pada
+     14px, dan itu yang memaksa tabel melebar. 9pt masih terbaca jelas di
+     kertas dan memberi cadangan ~40px untuk nominal yang lebih panjang. */
+  /* Tabel laporan memakai table-layout: fixed, dan itu disengaja.
+     Dengan auto, tabel tetap boleh melebihi area cetak karena tiap kolom tidak
+     boleh lebih sempit dari kata terpanjangnya. Begitu totalnya melewati
+     680px, browser memotong sisi kanan TANPA PERINGATAN: kolom Status
+     beserta nilainya hilang begitu saja dari kertas, dan hasil cetaknya tetap
+     terlihat rapi karena teks yang terpotong memang tidak ada di PDF.
+     Dengan fixed, tabel dipaksa tepat selebar area cetak, jadi tidak ada lagi
+     yang bisa jatuh dari tepi kanan.
+
+     Tapi fixed membuat semua kolom sama lebar, dan browser lalu MEMECAH nilai
+     yang tidak muat: "Rp2.200.50" + "0" di baris berikutnya, "Septembe" +
+     "r", "Sebagia" + "n". Angka yang terbelah tidak terbaca, jadi sama buruknya
+     dengan kolom hilang. Karena itu lebar kolom dibagi di sini, bukan
+     dibiarkan sama rata.
+
+     Yang WAJIB: white-space: normal. Laporan piutang memakai
+     .whitespace-nowrap supaya barisnya rapi di layar, dan itu membuat setiap
+     sel satu baris penuh: lebar minimum tabel 1348px di area cetak 680px,
+     dan seluruh kolom kanan hilang tanpa peringatan. !important karena
+     utilitas Tailwind punya specificity yang sama dan bisa menang tergantung
+     urutan .css. */
+  .print-area table {
+    table-layout: fixed;
+    width: 100% !important;
+    white-space: normal !important;
+  }
+
+  /* Kolom "No" di keempat laporan hanya berisi angka urut. Kalau ikut sama
+     lebar, ruang yang mahal untuk kolom Toko dan Total tergerus. */
+  .print-area th:first-child,
+  .print-area td:first-child {
+    width: 6%;
+  }
+
+  /* Kolom uang diberi jatah pasti supaya nominal tidak terbelah. Diukur di
+     browser: "Rp999.999.999" pada 8pt lebarnya 82px, sedangkan 14% dari 646px
+     hanya menyisakan 78px ruang pakai - kurang 4px, jadi angkanya terbelah
+     jadi "Rp999.999.9" + "99". 16% menyisakan 95px, cukup.
+     Kolom jumlah (stok) isinya jauh lebih pendek, jadi jatahnya kecil supaya
+     ruang tidak terbuang untuk kolom Nama Produk.
+     Selector memakai .print-money, bukan :has(.tabular-nums): :has() hanya
+     melihat keturunan, bukan elemen itu sendiri, jadi :has(.tabular-nums)
+     tidak cocok pada <td class="tabular-nums"> dan aturan lebarnya diam-diam
+     tidak pernah berlaku. Penanda .print-money/.print-num dipasang pada th
+     DAN td di tiap laporan. */
+  .print-area th.print-money,
+  .print-area td.print-money {
+    width: 16%;
+  }
+  .print-area th.print-num,
+  .print-area td.print-num {
+    width: 9%;
+  }
+
+  /* Badge pill (Lunas / Sebagian / Belum Bayar) tidak butuh padding
+     horizontal di kertas. Dengan padding 10px per sisi, "Sebagian" butuh
+     80px sedangkan kolom Status hanya 74px, jadi sel melebar. */
+  .print-area span.inline-flex {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  /* break-word, bukan anywhere: anywhere ikut memecah kata biasa seperti
+     "September" jadi "Septembe" + "r" pada kolom yang sempit. break-word
+     memecah di spasi lebih dulu, dan hanya memecah satu kata kalau benar-benar
+     tidak muat. */
+  .print-area th,
+  .print-area td {
+    padding: 4px !important;
+    /* Kata panjang (nama toko, nomor transaksi) harus boleh turun baris,
+       bukan memaksa tabel melebar dan menyingkirkan kolom Status. */
+    overflow-wrap: break-word;
+  }
+  /* 8pt: nominal realistis (Rp13.960.500 = 12 karakter) muat dalam satu
+     baris di kolom 91px. Pada 9pt kolom ikut tergesa dan angka terbelah. */
+  /* Isi tabel dicetak 9pt. Pada 14px, "September" (63px) dan "Pringapus"
+     (60px) tidak muat di kolom 74px dan terpotong di tengah kata, sehingga
+     tanggal terbaca "25 Septemb" + "er 2026" di dua baris. Pada 9pt keduanya
+     muat dan hanya pecah di spasi. Kolom uang tetap 8pt lewat aturan yang
+     lebih spesifik di bawah. */
+  .print-area tbody td {
+    font-size: 9pt;
+  }
+  .print-area .tabular-nums {
+    font-size: 8pt;
+  }
+  .print-area .overflow-x-auto {
+    overflow: visible !important;
+  }
+
+  /* Baris detail barang di bawah tiap transaksi.
+     `.print-detail-row` adalah <tr> pembungkus <td colspan>, jadi harus
+     tetap jadi elemen tabel (display: table-row). Kalau diberi display
+     lain, browser akan expelkan <tr> dari tabel dan baris detailnya
+     hilang saat print. Yang boleh diubah hanya padding & background. */
+  .print-detail-row > td {
+    padding: 0 !important;
+  }
+  .print-detail {
+    /* Warna abu terang & tanpa rounded agar tidak memberi kesan kartu
+       pada kertas. */
+    background: #f7f7f7 !important;
+    border-radius: 0 !important;
+  }
+  .print-detail table {
+    /* Tabel detail tidak boleh mewarisi min-width tabel induk yang dipaksa
+       0, tapi kolomnya dibuat fixed lewat <th style="width:...">. */
+    page-break-inside: avoid;
+  }
+  .print-detail th,
+  .print-detail td {
+    color: #000 !important;
+  }
+
+  /* Halaman lanskap untuk laporan terlebar. Butuh dukungan named pages;
+     bila tidak didukung, tetap jatuh ke A4 portrait. */
+  @page print-landscape {
+    size: A4 landscape;
+  }
+  .print-landscape {
+    page: print-landscape;
+  }
+
+  /* Header tabel berulang tiap halaman, baris tidak terbelah */
+  thead {
+    display: table-header-group !important;
+  }
+  tfoot {
+    display: table-footer-group !important;
+  }
+  tr,
+  img {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* ===== Kop & kaki laporan =====
+     Nomor halaman memakai counter(page) bawaan @page, jadi counter 'hal'
+     milik aplikasi ini sudah tidak dipakai lagi. */
+  .print-logo {
+    filter: grayscale(1) contrast(1.1);
+  }
+  .print-company {
+    color: #000;
+  }
+  .print-title {
+    color: #000;
+  }
+  .print-muted {
+    color: #4a4a4a;
+  }
+  .print-summary {
+    border: 1px solid #9a9a9a;
+    border-radius: 3px;
+    padding: 5px 7px;
+    break-inside: avoid;
+  }
+  .print-header {
+    margin-bottom: 10px;
+  }
+  .print-footer {
+    /* Isinya sudah pindah ke @bottom-left / @bottom-right di @page. Elemen
+       DOM disembunyikan supaya tidak tercetak dua kali. */
+    display: none !important;
+  }
+
+  /* Tabel laporan: garis tipis & jelas di atas kertas */
+  .print-area table {
+    font-size: 9pt;
+  }
+  .print-area thead th {
+    background: #ececec !important;
+    color: #000 !important;
+    border-bottom: 1px solid #000 !important;
+    padding: 4px 6px !important;
+  }
+  .print-area tbody td {
+    border-bottom: 1px solid #ccc !important;
+    padding: 3px 6px !important;
+  }
+  .print-area tfoot td {
+    border-top: 1.5px solid #000 !important;
+    border-bottom: none !important;
+    background: transparent !important;
+    color: #000 !important;
+  }
+  .print-area tbody tr:hover {
+    background: transparent !important;
+  }
+  /* Pangkas dekorasi yang tidak perlu di kertas */
+  .print-area .shadow-sm,
+  .print-area .shadow,
+  .print-area .shadow-md,
+  .print-area .shadow-lg {
+    box-shadow: none !important;
+  }
+}
+
+/* Nota kontan layout (screen + print) */
+.print-nota-kontan {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: 105mm;
+  height: 165mm;
+  background: #fff;
+  color: #000;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  padding: 7mm 5mm 7mm;
+  overflow: hidden;
+}
+.nk-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 5mm;
+  margin-bottom: 2mm;
+}
+.nk-title {
+  font-family: var(--font-nota-display);
+  font-size: 19pt;
+  font-weight: 400;
+  letter-spacing: 1px;
+  line-height: 1.15;
+  padding-top: 0.5mm;
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+.nk-meta {
+  flex: 1;
+  min-width: 0;
+}
+.nk-row {
+  display: flex;
+  align-items: baseline;
+  gap: 2mm;
+  margin-bottom: 2.5mm;
+}
+.nk-label {
+  width: 22mm;
+  flex-shrink: 0;
+  font-size: 8pt;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.nk-value {
+  flex: 1;
+  min-width: 0;
+  border-bottom: 1px dotted #000;
+  line-height: 1.4;
+  font-weight: 700;
+  font-size: 9pt;
+  text-align: left;
+}
+.nk-divider {
+  height: 1.4mm;
+  background: #231F20;
+  margin: 0 0 3mm;
+}
+.nk-nota-no {
+  display: flex;
+  align-items: baseline;
+  gap: 2mm;
+  margin-bottom: 2mm;
+}
+.nk-nota-no > span:first-child {
+  font-family: var(--font-sans);
+  font-size: 9pt;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+.nk-nota-no .nk-value {
+  font-size: 9pt;
+}
+.nk-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 8pt;
+  flex-shrink: 0;
+}
+.nk-table th,
+.nk-table td {
+  border: 0.3mm solid #000;
+  padding: 1mm 1.5mm;
+}
+.nk-table th {
+  font-weight: 700;
+  text-align: left;
+  font-size: 8pt;
+}
+.nk-center {
+  text-align: center;
+}
+.nk-right {
+  text-align: right;
+}
+.nk-total-row td {
+  font-weight: 800;
+  font-size: 9pt;
+  border-top: 0.5mm solid #000;
+}
+.nk-total-label {
+  font-weight: 700;
+  font-size: 9pt;
+}
+.nk-total-value {
+  text-align: right;
+  font-weight: 800;
+}
+.nk-sigs {
+  display: flex;
+  justify-content: space-between;
+  gap: 4mm;
+  margin-top: auto;
+  padding-top: 3mm;
+}
+.nk-sig {
+  flex: 1;
+  text-align: center;
+}
+.nk-sig-label {
+  font-family: var(--font-sans);
+  font-size: 8.5pt;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  margin-bottom: 7mm;
+  white-space: nowrap;
+}
+.nk-sig-line {
+  font-size: 8pt;
+  white-space: nowrap;
+}
+
+/* Mode gelap harus tetap mencetak di kertas putih. Tanpa ini, laporan yang
+   dicetak dari aplikasi gelap memakai warna dasar gelap dan tinta cetakan
+   ikut gelap. */
+@media print {
+  html.dark {
+    color-scheme: light;
+    --color-surface: #ffffff;
+    --color-surface-dim: #f0efea;
+    --color-surface-bright: #ffffff;
+    --color-surface-container-lowest: #ffffff;
+    --color-surface-container-low: #faf9f6;
+    --color-surface-container: #f4f3ef;
+    --color-surface-container-high: #edebe6;
+    --color-surface-container-highest: #e5e3dd;
+    --color-on-surface: #17191c;
+    --color-on-surface-variant: #4a4e55;
+    --color-surface-variant: #e5e3dd;
+    --color-background: #ffffff;
+    --color-on-background: #17191c;
+    --color-outline: #8a8e96;
+    --color-outline-variant: #d8d5ce;
+    --color-primary: #0e2a47;
+    --color-on-primary: #ffffff;
+  }
+}
+

@@ -24,11 +24,15 @@ class ProductUnit extends Model
         'product_id',
         'name',
         'factor',
+        'buy_price',
+        'sell_price',
         'is_base',
     ];
 
     protected $casts = [
         'factor' => 'integer',
+        'buy_price' => 'decimal:2',
+        'sell_price' => 'decimal:2',
         'is_base' => 'boolean',
     ];
 

@@ -1,28 +1,22 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { formatCurrency, formatDate } from '../../utils/format';
-import api from '../../services/api';
 import { toast } from 'sonner';
+import api from '../../services/api';
+import PageHeader from '../../components/ui/PageHeader';
+import DataTable from '../../components/ui/DataTable';
+import Sheet from '../../components/ui/Sheet';
 import Modal from '../../components/ui/Modal';
-
-const statusConfig = {
-  paid: {
-    label: 'Lunas',
-    bg: 'bg-success-container',
-    text: 'text-on-success-container',
-  },
-  partial: {
-    label: 'Sebagian',
-    bg: 'bg-warning-container',
-    text: 'text-on-warning-container',
-  },
-  unpaid: {
-    label: 'Belum Bayar',
-    bg: 'bg-danger-container',
-    text: 'text-on-danger-container',
-  },
-};
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import SearchInput from '../../components/ui/SearchInput';
+import Select from '../../components/ui/Select';
+import DateInput from '../../components/ui/DateInput';
+import Button from '../../components/ui/Button';
+import IconButton from '../../components/ui/IconButton';
+import { StatusBadge } from '../../components/ui/Badge';
+import Money from '../../components/ui/Money';
+import { EmptyState } from '../../components/ui/States';
+import { formatCurrency, formatDate, formatDateShort } from '../../lib/format';
 
 export default function SalesPage() {
   const navigate = useNavigate();
@@ -32,13 +26,14 @@ export default function SalesPage() {
     end_date: '',
     customer_id: '',
     payment_status: '',
+    search: '',
   });
   const [detail, setDetail] = useState(null);
   const [printData, setPrintData] = useState(null);
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['sales', filters],
     queryFn: async () => {
       const params = {};
@@ -46,6 +41,7 @@ export default function SalesPage() {
       if (filters.end_date) params.end_date = filters.end_date;
       if (filters.customer_id) params.customer_id = filters.customer_id;
       if (filters.payment_status) params.payment_status = filters.payment_status;
+      if (filters.search.trim()) params.search = filters.search.trim();
       const res = await api.get('/sales', { params });
       return res.data;
     },
@@ -53,10 +49,7 @@ export default function SalesPage() {
 
   const { data: customers } = useQuery({
     queryKey: ['customers'],
-    queryFn: async () => {
-      const res = await api.get('/customers');
-      return res.data;
-    },
+    queryFn: async () => (await api.get('/customers')).data,
   });
 
   const { data: saleDetail } = useQuery({
@@ -69,8 +62,8 @@ export default function SalesPage() {
     enabled: !!detail?.id,
   });
 
-  const sales = data?.data || data || [];
-  const customerList = customers?.data || customers || [];
+  const sales = useMemo(() => data?.data || data || [], [data]);
+  const customerList = useMemo(() => customers?.data || customers || [], [customers]);
 
   const deleteMutation = useMutation({
     mutationFn: async (id) => {
@@ -79,13 +72,14 @@ export default function SalesPage() {
     },
     onSuccess: () => {
       toast.success('Penjualan berhasil dihapus');
-      setDeleteConfirm(null);
+      setDeleteTarget(null);
       setDetail(null);
       queryClient.invalidateQueries({ queryKey: ['sales'] });
       queryClient.invalidateQueries({ queryKey: ['products'] });
     },
     onError: (err) => {
       toast.error(err.response?.data?.message || 'Gagal menghapus penjualan');
+      setDeleteTarget(null);
     },
   });
 
@@ -102,10 +96,10 @@ export default function SalesPage() {
   const getReceiptFilename = () => {
     if (!printData) return 'Nota.pdf';
     const months = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
-    const d = new Date(printData.date);
-    const day = String(d.getDate()).padStart(2, '0');
-    const month = months[d.getMonth()];
-    const name = (printData.customer?.name || 'Toko').replace(/\s+/g, '');
+    const date = new Date(printData.date);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = months[date.getMonth()];
+    const name = (printData.customer?.name || 'Pelanggan').replace(/\s+/g, '');
     return `Nota-${name}${day}${month}`;
   };
 
@@ -114,7 +108,9 @@ export default function SalesPage() {
     document.title = filename;
     setTimeout(() => {
       window.print();
-      setTimeout(() => { document.title = 'BALARAJA'; }, 2000);
+      setTimeout(() => {
+        document.title = 'BALARAJA';
+      }, 2000);
     }, 200);
   };
 
@@ -126,7 +122,9 @@ export default function SalesPage() {
         <div className="nk-meta">
           <div className="nk-row">
             <span className="nk-label">Hari/Tgl</span>
-            <span className="nk-value">{d.date ? new Date(d.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</span>
+            <span className="nk-value">
+              {d.date ? new Date(d.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
+            </span>
           </div>
           <div className="nk-row">
             <span className="nk-label">Kepada Yth</span>
@@ -150,9 +148,9 @@ export default function SalesPage() {
           </tr>
         </thead>
         <tbody>
-          {(d.items || []).map((item, i) => (
-            <tr key={i}>
-              <td className="nk-center">{i + 1}</td>
+          {(d.items || []).map((item, index) => (
+            <tr key={index}>
+              <td className="nk-center">{index + 1}</td>
               <td>{item.product?.name || item.product_name}</td>
               {/* Satuan ikut ditampilkan. Nota yang menulis "2" tanpa satuan
                   tidak bisa diperiksa ulang kalau produknya punya dus dan btl. */}
@@ -181,325 +179,385 @@ export default function SalesPage() {
     </div>
   );
 
-  return (
-    <div className="min-h-screen bg-surface">
-      <style>{`
-        @media print {
-          @page { size: 105mm 165mm; margin: 0; }
-        }
-      `}</style>
-      {/* Sticky Filter Bar */}
-      <div className="no-print pt-4 pb-2 -mx-4 px-4">
-        <div className="flex gap-2 overflow-x-auto pb-2 snap-x">
-          {/* Date Range */}
-          <div className="relative min-w-[200px] snap-start">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <span className="material-symbols-outlined text-outline text-[18px]">calendar_today</span>
-            </div>
-            <input
-              className="w-full pl-10 pr-3 py-2 bg-surface-container-lowest border border-outline-variant rounded-lg text-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-primary transition-all shadow-sm"
-              type="date"
-              value={filters.start_date}
-              onChange={(e) => setFilters((f) => ({ ...f, start_date: e.target.value }))}
-            />
-          </div>
-          <div className="relative min-w-[200px] snap-start">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <span className="material-symbols-outlined text-outline text-[18px]">calendar_today</span>
-            </div>
-            <input
-              className="w-full pl-10 pr-3 py-2 bg-surface-container-lowest border border-outline-variant rounded-lg text-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-primary transition-all shadow-sm"
-              type="date"
-              value={filters.end_date}
-              onChange={(e) => setFilters((f) => ({ ...f, end_date: e.target.value }))}
-            />
-          </div>
-          {/* Customer Dropdown */}
-          <div className="relative min-w-[180px] snap-start">
-            <select
-              className="w-full pl-3 pr-10 py-2 appearance-none bg-surface-container-lowest border border-outline-variant rounded-lg text-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-primary transition-all shadow-sm"
-              value={filters.customer_id}
-              onChange={(e) => setFilters((f) => ({ ...f, customer_id: e.target.value }))}
-            >
-              <option value="">Semua Pelanggan</option>
-              {customerList.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-              <span className="material-symbols-outlined text-outline text-[18px]">arrow_drop_down</span>
-            </div>
-          </div>
-          {/* Payment Status */}
-          <div className="relative min-w-[160px] snap-start">
-            <select
-              className="w-full pl-3 pr-10 py-2 appearance-none bg-surface-container-lowest border border-outline-variant rounded-lg text-sm text-on-surface focus:ring-2 focus:ring-primary focus:border-primary transition-all shadow-sm"
-              value={filters.payment_status}
-              onChange={(e) => setFilters((f) => ({ ...f, payment_status: e.target.value }))}
-            >
-              <option value="">Semua Status</option>
-              <option value="paid">Lunas</option>
-              <option value="partial">Sebagian</option>
-              <option value="unpaid">Belum Bayar</option>
-            </select>
-            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-              <span className="material-symbols-outlined text-outline text-[18px]">arrow_drop_down</span>
-            </div>
-          </div>
+  const hasPayment = (sale) =>
+    Boolean(sale) && Number(sale.total ?? 0) - Number(sale.receivable ?? 0) > 0.005;
+
+  const columns = [
+    {
+      key: 'sale_number',
+      header: 'No. Transaksi',
+      sortable: true,
+      render: (item) => (
+        <div className="min-w-0">
+          <p className="font-medium text-on-surface truncate">{item.sale_number}</p>
+          <p className="text-2xs text-on-surface-variant truncate">{formatDateShort(item.date)}</p>
         </div>
-      </div>
-
-      {/* Sale Cards */}
-      <div className="no-print flex flex-col gap-3 mt-4 pb-24">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-16">
-            <span className="material-symbols-outlined text-on-surface-variant animate-spin text-3xl">progress_activity</span>
-          </div>
-        ) : sales.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-on-surface-variant">
-            <span className="material-symbols-outlined text-5xl mb-2">receipt_long</span>
-            <p className="text-sm">Tidak ada data penjualan</p>
-          </div>
+      ),
+    },
+    {
+      key: 'customer',
+      header: 'Pelanggan',
+      render: (item) => (
+        <span className="text-on-surface-variant truncate">{item.customer?.name || '-'}</span>
+      ),
+    },
+    {
+      key: 'total',
+      header: 'Total',
+      align: 'right',
+      sortable: true,
+      render: (item) => <Money value={item.total} variant="strong" />,
+    },
+    {
+      key: 'receivable',
+      header: 'Sisa Piutang',
+      align: 'right',
+      sortable: true,
+      render: (item) =>
+        Number(item.receivable ?? 0) > 0 ? (
+          <Money value={item.receivable} variant="danger" />
         ) : (
-          sales.map((item) => {
-            const status = statusConfig[item.payment_status] || statusConfig.unpaid;
-            const itemCount = item.items_count || item.items?.length || 0;
-            return (
-              <div
-                key={item.id}
-                onClick={() => setDetail(item)}
-                className="bg-surface-container-lowest rounded-xl p-4 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.06)] border border-surface-container-low hover:border-outline-variant transition-colors group cursor-pointer relative overflow-hidden"
-              >
-                <div className={`absolute left-0 top-0 bottom-0 w-1 ${status.bg}`} />
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <p className="text-xs font-medium text-on-surface-variant mb-1">{item.sale_number} &bull; {formatDate(item.date)}</p>
-                    <h3 className="text-lg font-semibold text-on-surface">{item.customer?.name || '-'}</h3>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handlePrint(item); }}
-                      className="p-2 rounded-full hover:bg-surface-container-high text-outline hover:text-primary transition-colors"
-                      title="Cetak Nota"
-                    >
-                      <span className="material-symbols-outlined text-[18px]">print</span>
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); navigate(`/penjualan/${item.id}/edit`); }}
-                      className="p-2 rounded-full hover:bg-surface-container-high text-outline hover:text-primary transition-colors"
-                      title="Edit"
-                    >
-                      <span className="material-symbols-outlined text-[18px]">edit</span>
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setDeleteConfirm(item); }}
-                      className="p-2 rounded-full hover:bg-surface-container-high text-outline hover:text-error transition-colors"
-                      title="Hapus"
-                    >
-                      <span className="material-symbols-outlined text-[18px]">delete</span>
-                    </button>
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${status.bg} ${status.text}`}>{status.label}</span>
-                  </div>
-                </div>
-                <div className="flex justify-between items-end mt-4 pt-3 border-t border-surface-container">
-                  <div className="flex flex-col gap-1">
-                    {itemCount > 0 && (
-                      <div className="flex items-center gap-1 text-on-surface-variant text-xs">
-                        <span className="material-symbols-outlined text-[16px]">inventory_2</span>
-                        <span>{itemCount} Item</span>
-                      </div>
-                    )}
-                    {item.payment_status === 'partial' && item.remaining_balance > 0 && (
-                      <p className="text-xs text-on-surface-variant">Sisa: {formatCurrency(item.remaining_balance)}</p>
-                    )}
-                  </div>
-                  <p className="text-lg font-semibold text-primary">{formatCurrency(item.total)}</p>
-                </div>
-              </div>
-            );
-          })
-        )}
+          <span className="text-on-surface-variant text-xs">-</span>
+        ),
+    },
+    {
+      key: 'payment_status',
+      header: 'Status',
+      render: (item) => <StatusBadge kind="payment" value={item.payment_status} />,
+    },
+    {
+      key: 'aksi',
+      header: 'Aksi',
+      align: 'right',
+      render: (item) => (
+        <div className="flex items-center justify-end gap-0.5">
+          <IconButton
+            icon="print"
+            label={`Cetak nota ${item.sale_number}`}
+            size="sm"
+            tone="primary"
+            onClick={() => handlePrint(item)}
+          />
+          <IconButton
+            icon="edit"
+            label={`Edit ${item.sale_number}`}
+            size="sm"
+            tone="primary"
+            onClick={() => navigate(`/penjualan/${item.id}/edit`)}
+          />
+          <IconButton
+            icon="delete"
+            label={`Hapus ${item.sale_number}`}
+            size="sm"
+            tone="danger"
+            onClick={() => setDeleteTarget(item)}
+          />
+        </div>
+      ),
+    },
+  ];
+
+  const hasFilter = Boolean(
+    filters.start_date || filters.end_date || filters.customer_id || filters.payment_status || filters.search
+  );
+
+  return (
+    <div className="space-y-4">
+      <PageHeader
+        title="Penjualan"
+        subtitle="Riwayat transaksi penjualan dan status pelunasan"
+        breadcrumbs={[{ label: 'Transaksi', to: '/penjualan' }, { label: 'Penjualan' }]}
+        actions={
+          <Button icon="point_of_sale" size="sm" onClick={() => navigate('/penjualan/tambah')}>
+            Kasir
+          </Button>
+        }
+      />
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+        <DateInput
+          value={filters.start_date}
+          onChange={(value) => setFilters((f) => ({ ...f, start_date: value }))}
+          aria-label="Tanggal mulai"
+          placeholder="Mulai"
+        />
+        <DateInput
+          value={filters.end_date}
+          onChange={(value) => setFilters((f) => ({ ...f, end_date: value }))}
+          aria-label="Tanggal akhir"
+          placeholder="Akhir"
+        />
+        <Select
+          value={filters.customer_id}
+          onChange={(event) => setFilters((f) => ({ ...f, customer_id: event.target.value }))}
+          aria-label="Filter pelanggan"
+        >
+          <option value="">Semua pelanggan</option>
+          {customerList.map((customer) => (
+            <option key={customer.id} value={customer.id}>
+              {customer.name}
+            </option>
+          ))}
+        </Select>
+        <Select
+          value={filters.payment_status}
+          onChange={(event) => setFilters((f) => ({ ...f, payment_status: event.target.value }))}
+          aria-label="Filter status pembayaran"
+        >
+          <option value="">Semua status</option>
+          <option value="paid">Lunas</option>
+          <option value="partial">Sebagian</option>
+          <option value="unpaid">Belum bayar</option>
+        </Select>
       </div>
 
-      {/* FAB */}
-      <button
-        onClick={() => navigate('/penjualan/tambah')}
-        className="no-print fixed bottom-20 md:bottom-8 right-4 md:right-8 z-20 w-14 h-14 bg-primary text-on-primary rounded-2xl shadow-[0_8px_12px_-4px_rgba(0,0,0,0.15)] flex items-center justify-center hover:scale-105 active:scale-95 transition-all"
+      <SearchInput
+        value={filters.search}
+        onChange={(value) => setFilters((f) => ({ ...f, search: value }))}
+        placeholder="Cari nomor transaksi…"
+        className="sm:max-w-xs"
+      />
+
+      <DataTable
+        columns={columns}
+        rows={sales}
+        rowKey={(row) => row.id}
+        loading={isLoading}
+        minWidth="820px"
+        onRowClick={(row) => setDetail(row)}
+        emptyState={
+          isError ? (
+            <div role="alert" className="py-6 text-center">
+              <p className="text-sm font-medium text-danger">Gagal memuat penjualan</p>
+              <p className="text-xs text-on-surface-variant mt-1">
+                {error?.response?.status
+                  ? `Server merespons dengan kesalahan (${error.response.status}).`
+                  : 'Periksa koneksi internet Anda lalu coba lagi.'}
+              </p>
+            </div>
+          ) : (
+            <EmptyState
+              icon="receipt_long"
+              title={hasFilter ? 'Penjualan tidak ditemukan' : 'Belum ada penjualan'}
+              description={
+                hasFilter
+                  ? 'Coba ubah atau kosongkan filter.'
+                  : 'Mulai transaksi pertama lewat halaman Kasir.'
+              }
+              action={
+                <Button size="sm" icon="point_of_sale" onClick={() => navigate('/penjualan/tambah')}>
+                  Buka Kasir
+                </Button>
+              }
+            />
+          )
+        }
+        cardTitle={(item) => item.sale_number}
+        cardMeta={(item) => `${item.customer?.name || '-'} · ${formatDate(item.date)}`}
+        cardBadge={(item) => <StatusBadge kind="payment" value={item.payment_status} />}
+        cardFields={[
+          { label: 'Total', render: (item) => <Money value={item.total} variant="strong" /> },
+          {
+            label: 'Sisa Piutang',
+            render: (item) =>
+              Number(item.receivable ?? 0) > 0 ? (
+                <Money value={item.receivable} variant="danger" />
+              ) : (
+                'Lunas'
+              ),
+          },
+        ]}
+        cardActions={(item) => (
+          <>
+            <button
+              type="button"
+              onClick={() => handlePrint(item)}
+              className="flex-1 py-3 text-xs font-medium text-primary hover:bg-surface-container transition-colors flex items-center justify-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-[16px]" aria-hidden="true">
+                print
+              </span>
+              Cetak
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate(`/penjualan/${item.id}/edit`)}
+              className="flex-1 py-3 text-xs font-medium text-primary hover:bg-surface-container transition-colors flex items-center justify-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-[16px]" aria-hidden="true">
+                edit
+              </span>
+              Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => setDeleteTarget(item)}
+              className="flex-1 py-3 text-xs font-medium text-danger hover:bg-danger-container transition-colors flex items-center justify-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-[16px]" aria-hidden="true">
+                delete
+              </span>
+              Hapus
+            </button>
+          </>
+        )}
+      />
+
+      {/* Detail penjualan */}
+      <Sheet
+        open={Boolean(detail)}
+        onClose={() => setDetail(null)}
+        title="Detail Penjualan"
+        description={detail?.sale_number}
+        icon="receipt_long"
+        footer={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              icon="print"
+              onClick={() => handlePrint(detail)}
+            >
+              Cetak Nota
+            </Button>
+            <Button
+              size="sm"
+              icon="edit"
+              onClick={() => navigate(`/penjualan/${detail?.id}/edit`)}
+            >
+              Edit
+            </Button>
+          </>
+        }
       >
-        <span className="material-symbols-outlined text-[28px]">add</span>
-      </button>
-
-      {/* Detail Modal */}
-      {detail && (
-        <Modal
-          onClose={() => setDetail(null)}
-          title="Detail penjualan"
-          variant="sheet"
-          zIndex={60}
-          className="no-print"
-          panelClassName="bg-surface-container-low w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[85vh] overflow-y-auto"
-        >
-            <div className="flex items-center justify-between p-5 border-b border-outline-variant sticky top-0 bg-surface-container-low z-10">
-              <div>
-                <h3 className="text-lg font-bold text-on-surface">Detail Penjualan</h3>
-                <p className="text-sm text-on-surface-variant">{detail.sale_number}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handlePrint(detail)}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-primary text-on-primary text-sm font-medium hover:bg-primary/90 transition-colors"
-                >
-                  <span className="material-symbols-outlined text-[18px]">print</span>
-                  <span className="hidden sm:inline">Cetak Nota</span>
-                </button>
-                <button
-                  onClick={() => setDetail(null)}
-                  className="p-2 rounded-full hover:bg-surface-container-high transition-colors"
-                >
-                  <span className="material-symbols-outlined text-on-surface-variant">close</span>
-                </button>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2.5">
+            <div className="rounded-field bg-surface-container px-3 py-2.5">
+              <p className="text-2xs uppercase tracking-wide text-on-surface-variant">Tanggal</p>
+              <p className="text-sm font-medium text-on-surface mt-0.5">{formatDate(detail?.date)}</p>
+            </div>
+            <div className="rounded-field bg-surface-container px-3 py-2.5">
+              <p className="text-2xs uppercase tracking-wide text-on-surface-variant">Pelanggan</p>
+              <p className="text-sm font-medium text-on-surface mt-0.5 truncate">
+                {detail?.customer?.name || '-'}
+              </p>
+            </div>
+            <div className="rounded-field bg-surface-container px-3 py-2.5">
+              <p className="text-2xs uppercase tracking-wide text-on-surface-variant">Jatuh Tempo</p>
+              <p className="text-sm font-medium text-on-surface mt-0.5">
+                {detail?.due_date ? formatDate(detail.due_date) : '-'}
+              </p>
+            </div>
+            <div className="rounded-field bg-surface-container px-3 py-2.5">
+              <p className="text-2xs uppercase tracking-wide text-on-surface-variant">Status</p>
+              <div className="mt-1">
+                <StatusBadge kind="payment" value={detail?.payment_status} />
               </div>
             </div>
+            <div className="rounded-field bg-surface-container px-3 py-2.5">
+              <p className="text-2xs uppercase tracking-wide text-on-surface-variant">Total</p>
+              <Money value={detail?.total ?? 0} variant="strong" className="text-sm mt-0.5 block" />
+            </div>
+            <div className="rounded-field bg-surface-container px-3 py-2.5">
+              <p className="text-2xs uppercase tracking-wide text-on-surface-variant">Sisa Piutang</p>
+              <Money
+                value={detail?.receivable ?? 0}
+                variant={Number(detail?.receivable ?? 0) > 0 ? 'danger' : 'default'}
+                className="text-sm mt-0.5 block"
+              />
+            </div>
+          </div>
 
-            <div className="p-5 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-surface-container-low rounded-xl p-3">
-                  <span className="text-xs text-on-surface-variant flex items-center gap-1">
-                    <span className="material-symbols-outlined text-sm">calendar_today</span> Tanggal
-                  </span>
-                  <p className="font-medium text-on-surface mt-1">{formatDate(detail.date)}</p>
-                </div>
-                <div className="bg-surface-container-low rounded-xl p-3">
-                  <span className="text-xs text-on-surface-variant flex items-center gap-1">
-                    <span className="material-symbols-outlined text-sm">storefront</span> Toko
-                  </span>
-                  <p className="font-medium text-on-surface mt-1">{detail.customer?.name || '-'}</p>
-                </div>
-                <div className="bg-surface-container-low rounded-xl p-3">
-                  <span className="text-xs text-on-surface-variant flex items-center gap-1">
-                    <span className="material-symbols-outlined text-sm">event</span> Jatuh Tempo
-                  </span>
-                  <p className="font-medium text-on-surface mt-1">{detail.due_date ? formatDate(detail.due_date) : '-'}</p>
-                </div>
-                <div className="bg-surface-container-low rounded-xl p-3">
-                  <span className="text-xs text-on-surface-variant flex items-center gap-1">
-                    <span className="material-symbols-outlined text-sm">info</span> Status
-                  </span>
-                  <p className="mt-1">
-                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${(statusConfig[detail.payment_status] || statusConfig.unpaid).bg} ${(statusConfig[detail.payment_status] || statusConfig.unpaid).text}`}>
-                      {(statusConfig[detail.payment_status] || statusConfig.unpaid).label}
-                    </span>
-                  </p>
-                </div>
-                <div className="bg-surface-container-low rounded-xl p-3">
-                  <span className="text-xs text-on-surface-variant flex items-center gap-1">
-                    <span className="material-symbols-outlined text-sm">payments</span> Total
-                  </span>
-                  <p className="font-bold text-on-surface mt-1">{formatCurrency(detail.total)}</p>
-                </div>
-                <div className="bg-surface-container-low rounded-xl p-3">
-                  <span className="text-xs text-on-surface-variant flex items-center gap-1">
-                    <span className="material-symbols-outlined text-sm">account_balance_wallet</span> Sisa Piutang
-                  </span>
-                  <p className="font-bold text-on-surface mt-1">{formatCurrency(detail.receivable || 0)}</p>
-                </div>
-                {detail.note && (
-                  <div className="col-span-2 bg-surface-container-low rounded-xl p-3">
-                    <span className="text-xs text-on-surface-variant flex items-center gap-1">
-                      <span className="material-symbols-outlined text-sm">sticky_note_2</span> Catatan
-                    </span>
-                    <p className="font-medium text-on-surface mt-1">{detail.note}</p>
-                  </div>
-                )}
-              </div>
+          {detail?.note && (
+            <div className="rounded-field bg-surface-container px-3 py-2.5">
+              <p className="text-2xs uppercase tracking-wide text-on-surface-variant">Catatan</p>
+              <p className="text-sm text-on-surface mt-0.5">{detail.note}</p>
+            </div>
+          )}
 
-              {saleDetail?.items && saleDetail.items.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-semibold text-on-surface mb-3 flex items-center gap-2">
-                    <span className="material-symbols-outlined text-base">shopping_cart</span>
-                    Item Penjualan
-                  </h4>
-                  <div className="bg-surface-container-lowest rounded-xl overflow-hidden border border-outline-variant">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm min-w-[420px]">
-                      <thead>
-                        <tr className="bg-surface-container-low">
-                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-on-surface-variant">Produk</th>
-                          <th className="px-4 py-2.5 text-right text-xs font-semibold text-on-surface-variant">Qty</th>
-                          <th className="px-4 py-2.5 text-right text-xs font-semibold text-on-surface-variant">Harga</th>
-                          <th className="px-4 py-2.5 text-right text-xs font-semibold text-on-surface-variant">Subtotal</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-outline-variant">
-                        {saleDetail.items.map((item, idx) => (
-                          <tr key={idx}>
-                            <td className="px-4 py-3 text-on-surface">{item.product?.name || item.product_name}</td>
-                            <td className="px-4 py-3 text-right text-on-surface-variant">
-                              {item.quantity} {item.unit_name || ''}
-                            </td>
-                            <td className="px-4 py-3 text-right text-on-surface-variant">{formatCurrency(item.sell_price)}</td>
-                            <td className="px-4 py-3 text-right font-medium text-on-surface">{formatCurrency(item.subtotal)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+          {saleDetail?.items && saleDetail.items.length > 0 && (
+            <div>
+              <h3 className="text-xs font-semibold text-on-surface mb-2">Item Penjualan</h3>
+              <ul className="divide-y divide-outline-variant/50 rounded-field border border-outline-variant/70 overflow-hidden">
+                {saleDetail.items.map((item, index) => (
+                  <li key={index} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="text-sm text-on-surface truncate">
+                        {item.product?.name || item.product_name}
+                      </p>
+                      <p className="text-2xs text-on-surface-variant">
+                        {item.quantity} {item.unit_name || ''} × {formatCurrency(item.sell_price)}
+                      </p>
                     </div>
-                  </div>
-                </div>
-              )}
+                    <Money value={item.subtotal} variant="strong" className="text-sm shrink-0" />
+                  </li>
+                ))}
+              </ul>
             </div>
-        </Modal>
-      )}
+          )}
+        </div>
+      </Sheet>
 
       {/* Print Nota Kontan — hidden on screen, only visible during print */}
       {printData && (
-        <div className="print-isolated print-only">
-          {renderNotaKontan(printData)}
-        </div>
+        <div className="print-isolated print-only">{renderNotaKontan(printData)}</div>
       )}
 
       {showPreview && printData && (
-        <Modal className="no-print" onClose={() => { setShowPreview(false); setPrintData(null); }} title="Pratinjau nota" variant="center" zIndex={70} panelClassName="bg-surface rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col mx-4">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-outline-variant shrink-0">
-              <div>
-                <h3 className="text-lg font-bold text-on-surface">Preview Nota</h3>
-                <p className="text-xs text-on-surface-variant">{printData.sale_number}</p>
-              </div>
-              <button onClick={() => { setShowPreview(false); setPrintData(null); }} className="p-2 rounded-full hover:bg-surface-container-high transition-colors">
-                <span className="material-symbols-outlined text-on-surface-variant">close</span>
-              </button>
-            </div>
-            <div className="overflow-y-auto flex-1 p-6 flex justify-center">
-              <div className="bg-print-paper shadow-md rounded">
-                {renderNotaKontan(printData)}
-              </div>
-            </div>
-            <div className="shrink-0 px-5 py-3 border-t border-outline-variant flex gap-3">
-              <button onClick={() => { setShowPreview(false); setPrintData(null); }} className="flex-1 py-3 rounded-xl border border-outline-variant text-on-surface text-sm font-medium hover:bg-surface-container-high transition-colors">Tutup</button>
-              <button onClick={handlePrintNow} className="flex-1 py-3 rounded-xl bg-primary text-on-primary text-sm font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-2">
-                <span className="material-symbols-outlined text-[18px]">print</span> Cetak
-              </button>
-            </div>
+        <Modal
+          className="no-print"
+          onClose={() => {
+            setShowPreview(false);
+            setPrintData(null);
+          }}
+          title="Pratinjau nota"
+          subtitle={printData.sale_number}
+          variant="center"
+          panelClassName="sm:max-w-lg"
+          bodyClassName="p-4 flex justify-center bg-surface-container"
+          footer={
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setShowPreview(false);
+                  setPrintData(null);
+                }}
+              >
+                Tutup
+              </Button>
+              <Button size="sm" icon="print" onClick={handlePrintNow}>
+                Cetak
+              </Button>
+            </>
+          }
+        >
+          <div className="bg-print-paper shadow-md rounded">{renderNotaKontan(printData)}</div>
         </Modal>
       )}
 
-      {deleteConfirm && (
-        <Modal onClose={() => setDeleteConfirm(null)} title="Konfirmasi hapus penjualan" variant="center" zIndex={70} panelClassName="bg-surface rounded-xl shadow-xl w-full max-w-sm p-6 mx-4">
-            <div className="flex items-center gap-3 mb-4">
-              <span className="material-symbols-outlined text-error text-2xl">delete</span>
-              <h3 className="text-lg font-bold text-on-surface">Hapus Penjualan?</h3>
-            </div>
-            <p className="text-sm text-on-surface-variant mb-6">
-              Transaksi <strong>{deleteConfirm.sale_number}</strong> akan dihapus. Stok produk akan dikembalikan.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button onClick={() => setDeleteConfirm(null)} className="px-4 py-2 rounded-xl border border-outline-variant text-on-surface text-sm font-medium hover:bg-surface-container-high transition-colors">Batal</button>
-              <button onClick={() => deleteMutation.mutate(deleteConfirm.id)} disabled={deleteMutation.isPending} className="px-4 py-2 rounded-xl bg-error text-on-error text-sm font-medium hover:bg-error/90 transition-colors disabled:opacity-50">
-                {deleteMutation.isPending ? 'Menghapus...' : 'Hapus'}
-              </button>
-            </div>
-        </Modal>
-      )}
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (hasPayment(deleteTarget)) {
+            throw new Error(
+              'Transaksi ini sudah menerima pembayaran. Hapus pembayarannya dulu lewat halaman Pembayaran agar tidak ada pembayaran yang hilang diam-diam.'
+            );
+          }
+          deleteMutation.mutate(deleteTarget.id);
+        }}
+        title="Hapus penjualan?"
+        message={`Transaksi ${deleteTarget?.sale_number ?? ''} akan dihapus dan stok produk dikembalikan.`}
+        detail={
+          hasPayment(deleteTarget)
+            ? 'Transaksi ini sudah punya pembayaran. Menghapus transaksi akan ikut menghapus pembayaran yang tercatat.'
+            : 'Tindakan ini tidak bisa dibatalkan.'
+        }
+        confirmLabel="Hapus"
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

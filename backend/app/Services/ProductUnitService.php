@@ -216,6 +216,8 @@ class ProductUnitService
             $clean[] = [
                 'name' => mb_substr($name, 0, 32),
                 'factor' => max(0, (int) ($unit['factor'] ?? 0)),
+                'buy_price' => isset($unit['buy_price']) && $unit['buy_price'] !== '' && $unit['buy_price'] !== null ? round((float) $unit['buy_price'], 2) : null,
+                'sell_price' => isset($unit['sell_price']) && $unit['sell_price'] !== '' && $unit['sell_price'] !== null ? round((float) $unit['sell_price'], 2) : null,
                 'is_base' => (bool) ($unit['is_base'] ?? false),
             ];
         }
@@ -415,6 +417,8 @@ class ProductUnitService
                 if ($existing) {
                     $existing->update([
                         'factor' => $unit['factor'],
+                        'buy_price' => $unit['buy_price'],
+                        'sell_price' => $unit['sell_price'],
                         'is_base' => $unit['is_base'],
                     ]);
                     $keep[] = $existing->id;

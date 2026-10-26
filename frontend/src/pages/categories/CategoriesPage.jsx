@@ -1,8 +1,19 @@
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import api from '../../services/api';
+import PageHeader from '../../components/ui/PageHeader';
+import DataTable from '../../components/ui/DataTable';
 import Modal from '../../components/ui/Modal';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import SearchInput from '../../components/ui/SearchInput';
+import Input from '../../components/ui/Input';
+import Textarea from '../../components/ui/Textarea';
+import FormField from '../../components/ui/FormField';
+import Button from '../../components/ui/Button';
+import IconButton from '../../components/ui/IconButton';
+import Badge from '../../components/ui/Badge';
+import { EmptyState } from '../../components/ui/States';
 
 const initialForm = { name: '', description: '' };
 
@@ -15,11 +26,24 @@ export default function CategoriesPage() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(initialForm);
   const [search, setSearch] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['categories'],
     queryFn: async () => {
       const res = await api.get('/categories');
+      return Array.isArray(res.data) ? res.data : (res.data.data || []);
+    },
+  });
+
+  // Dipakai untuk menghitung produk per kategori. Kategori yang masih punya
+  // produk tidak boleh dihapus: di server, `products.category_id` memakai
+  // cascade, jadi menghapus kategori ikut menghapus produknya - termasuk
+  // produk yang sudah punya riwayat penjualan.
+  const { data: products } = useQuery({
+    queryKey: ['products'],
+    queryFn: async () => {
+      const res = await api.get('/products');
       return Array.isArray(res.data) ? res.data : (res.data.data || []);
     },
   });
@@ -48,9 +72,14 @@ export default function CategoriesPage() {
     mutationFn: (id) => api.delete(`/categories/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categories'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
       toast.success('Kategori berhasil dihapus');
+      setDeleteTarget(null);
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Gagal menghapus kategori'),
+    onError: (err) => {
+      toast.error(err.response?.data?.message || 'Gagal menghapus kategori');
+      setDeleteTarget(null);
+    },
   });
 
   function openCreate() {
@@ -71,8 +100,8 @@ export default function CategoriesPage() {
     setForm(initialForm);
   }
 
-  function handleSubmit(e) {
-    e.preventDefault();
+  function handleSubmit(event) {
+    event.preventDefault();
     if (!form.name.trim()) return toast.error('Nama kategori wajib diisi');
     if (editing) {
       updateMutation.mutate({ id: editing.id, payload: form });
@@ -81,164 +110,233 @@ export default function CategoriesPage() {
     }
   }
 
-  function handleDelete(item) {
-    if (!window.confirm(`Hapus kategori "${item.name}"?`)) return;
-    deleteMutation.mutate(item.id);
-  }
-
-  // Referensi stabil supaya useMemo di bawah benar-benar bekerja;
-  // `data || []` akan membuat array baru setiap render.
   const categories = data || EMPTY_LIST;
+
+  const productCountByCategory = useMemo(() => {
+    const map = new Map();
+    (products || []).forEach((product) => {
+      const key = String(product.category_id ?? '');
+      map.set(key, (map.get(key) ?? 0) + 1);
+    });
+    return map;
+  }, [products]);
 
   const filteredCategories = useMemo(() => {
     if (!search.trim()) return categories;
-    const q = search.toLowerCase();
+    const query = search.toLowerCase();
     return categories.filter(
       (item) =>
-        item.name?.toLowerCase().includes(q) ||
-        item.description?.toLowerCase().includes(q)
+        item.name?.toLowerCase().includes(query) ||
+        item.description?.toLowerCase().includes(query)
     );
   }, [categories, search]);
 
-  return (
-    <main className="px-4 py-6 max-w-4xl mx-auto space-y-4">
-      <div className="mb-6">
-        <h2 className="text-lg font-semibold text-primary">Kategori</h2>
-        <p className="text-sm text-on-surface-variant mt-1">Kelola data kategori produk</p>
-      </div>
+  const deleteProductCount = deleteTarget
+    ? productCountByCategory.get(String(deleteTarget.id)) ?? 0
+    : 0;
 
-      <div className="relative">
-        <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline">search</span>
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Cari kategori..."
-          className="w-full h-12 pl-12 pr-4 rounded-xl border border-outline-variant bg-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm text-on-surface placeholder:text-outline transition-all duration-200 shadow-sm"
-        />
-      </div>
-
-      {isLoading && (
-        <div className="flex flex-col items-center justify-center py-20 gap-3">
-          <span className="material-symbols-outlined text-outline animate-spin text-4xl">progress_activity</span>
-          <p className="text-outline text-sm">Memuat data...</p>
-        </div>
-      )}
-
-      {isError && (
-        <div className="flex flex-col items-center justify-center py-20 gap-3">
-          <span className="material-symbols-outlined text-error text-4xl">error</span>
-          <p className="text-error text-sm">Gagal memuat data: {error?.message}</p>
-        </div>
-      )}
-
-      {!isLoading && !isError && filteredCategories.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 gap-3">
-          <span className="material-symbols-outlined text-outline text-5xl">category</span>
-          <p className="text-outline text-sm">
-            {search ? 'Tidak ada kategori ditemukan' : 'Belum ada data kategori'}
+  const columns = [
+    {
+      key: 'name',
+      header: 'Kategori',
+      sortable: true,
+      render: (item) => (
+        <div className="min-w-0">
+          <p className="font-medium text-on-surface truncate">{item.name}</p>
+          <p className="text-2xs text-on-surface-variant truncate">
+            {item.description || 'Tidak ada keterangan'}
           </p>
         </div>
-      )}
-
-      {!isLoading && !isError && filteredCategories.map((item) => (
-        <div
-          key={item.id}
-          className="bg-surface rounded-xl p-4 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.06)] border border-surface-container-high flex gap-4 items-center"
-        >
-          <div className="flex-1 min-w-0">
-            <h3 className="text-base font-semibold text-on-surface truncate">{item.name}</h3>
-            <p className="text-sm text-on-surface-variant truncate">{item.description || 'Tidak ada keterangan'}</p>
-          </div>
-          <div className="flex flex-col gap-2 shrink-0">
-            <button
-              onClick={() => openEdit(item)}
-              className="w-8 h-8 rounded-full flex items-center justify-center text-outline hover:bg-surface-variant hover:text-primary transition-colors"
-              title="Edit"
-            >
-              <span className="material-symbols-outlined text-[20px]">edit</span>
-            </button>
-            <button
-              onClick={() => handleDelete(item)}
-              className="w-8 h-8 rounded-full flex items-center justify-center text-outline hover:bg-error-container hover:text-error transition-colors"
-              title="Hapus"
-            >
-              <span className="material-symbols-outlined text-[20px]">delete</span>
-            </button>
-          </div>
+      ),
+    },
+    {
+      key: 'products',
+      header: 'Produk',
+      align: 'right',
+      sortable: true,
+      sortValue: (item) => productCountByCategory.get(String(item.id)) ?? 0,
+      render: (item) => {
+        const count = productCountByCategory.get(String(item.id)) ?? 0;
+        return count > 0 ? (
+          <Badge tone="info">{count} produk</Badge>
+        ) : (
+          <span className="text-on-surface-variant text-xs">Kosong</span>
+        );
+      },
+    },
+    {
+      key: 'aksi',
+      header: 'Aksi',
+      align: 'right',
+      render: (item) => (
+        <div className="flex items-center justify-end gap-0.5">
+          <IconButton
+            icon="edit"
+            label={`Edit ${item.name}`}
+            size="sm"
+            tone="primary"
+            onClick={() => openEdit(item)}
+          />
+          <IconButton
+            icon="delete"
+            label={`Hapus ${item.name}`}
+            size="sm"
+            tone="danger"
+            onClick={() => setDeleteTarget(item)}
+          />
         </div>
-      ))}
+      ),
+    },
+  ];
 
-      <button
-        onClick={openCreate}
-        className="fixed bottom-24 right-4 md:bottom-8 md:right-8 w-14 h-14 bg-primary text-on-primary rounded-2xl shadow-[0_8px_12px_-4px_rgba(0,0,0,0.1)] flex items-center justify-center hover:scale-105 active:scale-95 transition-all z-40"
-        title="Tambah Kategori"
-      >
-        <span className="material-symbols-outlined text-[28px]">add</span>
-      </button>
+  return (
+    <div className="space-y-4">
+      <PageHeader
+        title="Kategori"
+        subtitle="Kelompokkan produk agar mudah dicari dan dilaporkan"
+        breadcrumbs={[{ label: 'Master Data', to: '/produk' }, { label: 'Kategori' }]}
+        actions={
+          <Button icon="add" size="sm" onClick={openCreate}>
+            Tambah Kategori
+          </Button>
+        }
+      />
+
+      <SearchInput
+        value={search}
+        onChange={setSearch}
+        placeholder="Cari kategori…"
+        className="sm:max-w-xs"
+      />
+
+      <DataTable
+        columns={columns}
+        rows={filteredCategories}
+        rowKey={(row) => row.id}
+        loading={isLoading}
+        minWidth="520px"
+        emptyState={
+          isError ? (
+            <div role="alert" className="py-6 text-center">
+              <p className="text-sm font-medium text-danger">Gagal memuat kategori</p>
+              <p className="text-xs text-on-surface-variant mt-1">
+                {error?.response?.status
+                  ? `Server merespons dengan kesalahan (${error.response.status}).`
+                  : 'Periksa koneksi internet Anda lalu coba lagi.'}
+              </p>
+            </div>
+          ) : (
+            <EmptyState
+              icon="category"
+              title={search ? 'Kategori tidak ditemukan' : 'Belum ada kategori'}
+              description={
+                search
+                  ? 'Coba kata kunci lain.'
+                  : 'Buat kategori agar produk lebih mudah dikelompokkan.'
+              }
+              action={
+                <Button size="sm" icon="add" onClick={openCreate}>
+                  Tambah Kategori
+                </Button>
+              }
+            />
+          )
+        }
+        cardTitle={(item) => item.name}
+        cardMeta={(item) => item.description || 'Tidak ada keterangan'}
+        cardBadge={(item) => {
+          const count = productCountByCategory.get(String(item.id)) ?? 0;
+          return count > 0 ? <Badge tone="info">{count} produk</Badge> : null;
+        }}
+        cardActions={(item) => (
+          <>
+            <button
+              type="button"
+              onClick={() => openEdit(item)}
+              className="flex-1 py-3 text-xs font-medium text-primary hover:bg-surface-container transition-colors flex items-center justify-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-[16px]" aria-hidden="true">
+                edit
+              </span>
+              Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => setDeleteTarget(item)}
+              className="flex-1 py-3 text-xs font-medium text-danger hover:bg-danger-container transition-colors flex items-center justify-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-[16px]" aria-hidden="true">
+                delete
+              </span>
+              Hapus
+            </button>
+          </>
+        )}
+      />
 
       {showModal && (
-        <Modal onClose={closeModal} title="Form kategori" variant="sheet" zIndex={60} panelClassName="bg-surface w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[85vh]" initialFocus='input, select, textarea'>
-            <div className="flex items-center justify-between px-6 pt-6 pb-2">
-              <h3 className="text-on-surface text-lg font-semibold">
-                {editing ? 'Edit Kategori' : 'Tambah Kategori'}
-              </h3>
-              <button
-                onClick={closeModal}
-                className="p-2 rounded-xl text-outline hover:bg-surface-container-high transition-colors"
-              >
-                <span className="material-symbols-outlined">close</span>
-              </button>
-            </div>
-            <div className="overflow-y-auto flex-1 pb-20">
-            <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-on-surface-variant mb-1.5" htmlFor="nama-1">Nama *</label>
-                <input
-                  id="nama-1"
-                  type="text"
-                  required
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full h-12 px-4 bg-surface text-on-surface placeholder-outline rounded-xl border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm transition"
-                  placeholder="Masukkan nama kategori"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-on-surface-variant mb-1.5" htmlFor="keterangan-2">Keterangan</label>
-                <textarea
-                  id="keterangan-2"
-                  value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  rows={3}
-                  className="w-full px-4 py-3 bg-surface text-on-surface placeholder-outline rounded-xl border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm transition resize-none"
-                  placeholder="Masukkan keterangan (opsional)"
-                />
-              </div>
-            </form>
-            </div>
-            <div className="sticky bottom-0 bg-surface border-t border-outline-variant/30 px-6 py-3 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={closeModal}
-                className="h-10 px-5 text-sm font-medium text-primary bg-transparent hover:bg-primary/10 rounded-xl transition-colors"
-              >
+        <Modal
+          onClose={closeModal}
+          title={editing ? 'Edit Kategori' : 'Tambah Kategori'}
+          variant="center"
+          panelClassName="sm:max-w-sm"
+          footer={
+            <>
+              <Button variant="outline" size="sm" onClick={closeModal}>
                 Batal
-              </button>
-              <button
+              </Button>
+              <Button
+                size="sm"
                 onClick={handleSubmit}
-                disabled={createMutation.isPending || updateMutation.isPending}
-                className="h-10 px-5 text-sm font-medium text-on-primary bg-primary hover:bg-primary/90 rounded-xl transition-colors disabled:opacity-50"
+                loading={createMutation.isPending || updateMutation.isPending}
               >
-                {createMutation.isPending || updateMutation.isPending
-                  ? 'Menyimpan...'
-                  : editing
-                  ? 'Simpan Perubahan'
-                  : 'Simpan'}
-              </button>
-            </div>
+                {editing ? 'Simpan Perubahan' : 'Simpan'}
+              </Button>
+            </>
+          }
+        >
+          <form onSubmit={handleSubmit} className="space-y-3.5">
+            <FormField label="Nama kategori" required>
+              <Input
+                value={form.name}
+                onChange={(event) => setForm({ ...form, name: event.target.value })}
+                placeholder="Masukkan nama kategori"
+                required
+                autoFocus
+              />
+            </FormField>
+            <FormField label="Keterangan" hint="Opsional">
+              <Textarea
+                value={form.description}
+                onChange={(event) => setForm({ ...form, description: event.target.value })}
+                placeholder="Contoh: MATERIAL BANGUNAN"
+              />
+            </FormField>
+          </form>
         </Modal>
       )}
-    </main>
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteProductCount > 0) {
+            throw new Error(
+              `Kategori ini masih dipakai ${deleteProductCount} produk. Pindahkan produknya ke kategori lain sebelum menghapus.`
+            );
+          }
+          deleteMutation.mutate(deleteTarget.id);
+        }}
+        title="Hapus kategori?"
+        message={`Kategori "${deleteTarget?.name ?? ''}" akan dihapus.`}
+        detail={
+          deleteProductCount > 0
+            ? `Kategori ini masih dipakai ${deleteProductCount} produk. Menghapusnya akan ikut menghapus produk tersebut.`
+            : 'Tindakan ini tidak bisa dibatalkan.'
+        }
+        confirmLabel="Hapus"
+        loading={deleteMutation.isPending}
+      />
+    </div>
   );
 }

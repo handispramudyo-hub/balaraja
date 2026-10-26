@@ -7,8 +7,10 @@ import LoginPage from '../pages/auth/LoginPage'
 const DashboardPage = lazy(() => import('../pages/dashboard/DashboardPage'))
 const CategoriesPage = lazy(() => import('../pages/categories/CategoriesPage'))
 const SuppliersPage = lazy(() => import('../pages/suppliers/SuppliersPage'))
+const PayablesPage = lazy(() => import('../pages/suppliers/PayablesPage'))
 const CustomersPage = lazy(() => import('../pages/customers/CustomersPage'))
 const ProductsPage = lazy(() => import('../pages/products/ProductsPage'))
+const ProductDetailPage = lazy(() => import('../pages/products/ProductDetailPage'))
 const PurchasesPage = lazy(() => import('../pages/purchases/PurchasesPage'))
 const CreatePurchase = lazy(() => import('../pages/purchases/CreatePurchase'))
 const SalesPage = lazy(() => import('../pages/sales/SalesPage'))
@@ -42,6 +44,7 @@ export default function AppRoutes() {
         <Route element={<ProtectedRoute />}>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/produk" element={<ProductsPage />} />
+          <Route path="/produk/:id" element={<ProductDetailPage />} />
           <Route path="/kategori" element={<CategoriesPage />} />
           <Route path="/supplier" element={<SuppliersPage />} />
           <Route path="/toko" element={<CustomersPage />} />
@@ -53,7 +56,10 @@ export default function AppRoutes() {
           <Route path="/penjualan/:id/edit" element={<CreateSale />} />
           <Route path="/pembayaran" element={<PaymentsPage />} />
           <Route path="/pelunasan-utang" element={<SupplierPaymentsPage />} />
-    <Route path="/angsuran" element={<InstallmentsPage />} />
+          {/* Utang Supplier = posisi utang (apa yang masih owes). Bedakan
+              dari /pelunasan-utang yang berisi riwayat pembayaran. */}
+          <Route path="/utang" element={<PayablesPage />} />
+          <Route path="/angsuran" element={<InstallmentsPage />} />
           <Route path="/biaya" element={<ExpensesPage />} />
           <Route path="/piutang" element={<ReceivableReport />} />
           <Route path="/laba-rugi" element={<ProfitLossReport />} />

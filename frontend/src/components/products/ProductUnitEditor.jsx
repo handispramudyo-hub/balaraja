@@ -2,7 +2,7 @@ import { formatNumber } from '../../utils/format';
 import { emptyUnit, rebaseRatio, validateUnits } from './unitRules';
 
 const inputClass =
-  'h-11 px-3 rounded-lg border border-outline-variant bg-surface text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:ring-2 focus:ring-primary/40 transition';
+  'h-10 px-2.5 rounded-field border border-outline-variant bg-surface-container-lowest text-sm text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition';
 
 /**
  * Editor daftar satuan produk.
@@ -69,7 +69,12 @@ export default function ProductUnitEditor({ units, onChange, disabled = false, c
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-on-surface-variant">Satuan</span>
+        <div>
+          <span className="text-xs font-medium text-on-surface-variant">Satuan</span>
+          <p className="text-2xs text-on-surface-variant/80">
+            Tandai satuan terkecil sebagai <strong>Dasar</strong> (stok disimpan di sini).
+          </p>
+        </div>
         <button
           type="button"
           onClick={addRow}
@@ -88,11 +93,19 @@ export default function ProductUnitEditor({ units, onChange, disabled = false, c
             .map((r) => r.name.trim().toLowerCase())
             .filter(Boolean);
           const nameTaken = otherNames.includes((row.name || '').trim().toLowerCase());
+          const baseLabel = baseName || 'satuan dasar';
+          const unitLabel = row.name.trim() || (row.is_base ? baseLabel : 'satuan');
 
           return (
-            <div key={row.id ?? `new-${index}`} className="rounded-lg border border-outline-variant/60 bg-surface-container-low p-3 space-y-2">
+            <div
+              key={row.id ?? `new-${index}`}
+              className="rounded-field border border-outline-variant/70 bg-surface-container-low/40 p-2.5 space-y-2"
+            >
               <div className="flex items-center gap-2">
-                <label className="flex items-center gap-1.5 text-xs text-on-surface-variant shrink-0 cursor-pointer" title="Satuan terkecil, tempat stok disimpan">
+                <label
+                  className="flex items-center gap-1.5 text-xs text-on-surface-variant shrink-0 cursor-pointer"
+                  title="Satuan terkecil, tempat stok disimpan"
+                >
                   <input
                     type="radio"
                     name="unit-base"
@@ -101,7 +114,7 @@ export default function ProductUnitEditor({ units, onChange, disabled = false, c
                     onChange={() => setBase(index)}
                     className="w-4 h-4 accent-primary"
                   />
-                  <span className="hidden sm:inline">Dasar</span>
+                  <span>Dasar</span>
                 </label>
 
                 <input
@@ -109,9 +122,9 @@ export default function ProductUnitEditor({ units, onChange, disabled = false, c
                   value={row.name}
                   disabled={disabled}
                   onChange={(e) => update(index, { name: e.target.value })}
-                  placeholder="btl"
+                  placeholder={row.is_base ? 'botol' : 'dos'}
                   aria-label="Nama satuan"
-                  className={`${inputClass} flex-1 min-w-0 ${nameTaken ? 'border-error' : ''}`}
+                  className={`${inputClass} flex-1 min-w-0 ${nameTaken ? 'border-danger focus:border-danger focus:ring-danger/20' : ''}`}
                 />
 
                 <button
@@ -119,30 +132,39 @@ export default function ProductUnitEditor({ units, onChange, disabled = false, c
                   onClick={() => removeRow(index)}
                   disabled={disabled || rows.length <= 1}
                   aria-label={`Hapus satuan ${row.name || 'ini'}`}
-                  className="w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-outline hover:bg-error-container hover:text-error transition-colors disabled:opacity-30"
+                  className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-danger-container hover:text-danger transition-colors disabled:opacity-30"
                 >
                   <span className="material-symbols-outlined text-[18px]">close</span>
                 </button>
               </div>
 
-              <div className="flex items-center gap-2 pl-6 sm:pl-[3.1rem]">
-                <span className="text-xs text-on-surface-variant shrink-0">
-                  {row.is_base ? '1' : `1 ${row.name || 'satuan'}`} =
-                </span>
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={row.factor}
-                  disabled={disabled || row.is_base}
-                  onChange={(e) => update(index, { factor: e.target.value })}
-                  aria-label={`Isi 1 ${row.name || 'satuan'}`}
-                  className={`${inputClass} w-20 text-center ${row.is_base ? 'opacity-60' : ''}`}
-                />
-                <span className="text-xs text-on-surface-variant truncate">
-                  {row.is_base ? baseName || 'satuan dasar' : baseName ? baseName : 'satuan dasar'}
-                </span>
-              </div>
+              {row.is_base ? (
+                <p className="text-2xs text-on-surface-variant/80">
+                  Stok akan dihitung dalam <strong>{unitLabel}</strong>. Faktor = <strong>1</strong>.
+                </p>
+              ) : (
+                <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-on-surface-variant shrink-0">1 {unitLabel} berisi</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min="1"
+                    step="1"
+                    value={row.factor}
+                    disabled={disabled}
+                    onChange={(e) => update(index, { factor: e.target.value })}
+                    aria-label={`Jumlah ${baseLabel} per 1 ${unitLabel}`}
+                    className={`${inputClass} w-24 text-center tabular-nums`}
+                  />
+                  <span className="text-xs text-on-surface-variant shrink-0">{baseLabel}</span>
+                </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input type="number" min="0" step="0.01" value={row.buy_price ?? ''} disabled={disabled} onChange={(e) => update(index, { buy_price: e.target.value })} placeholder="Harga beli" aria-label={`Harga beli per ${unitLabel}`} className={inputClass} />
+                    <input type="number" min="0" step="0.01" value={row.sell_price ?? ''} disabled={disabled} onChange={(e) => update(index, { sell_price: e.target.value })} placeholder="Harga jual" aria-label={`Harga jual per ${unitLabel}`} className={inputClass} />
+                  </div>
+                </>
+              )}
             </div>
           );
         })}

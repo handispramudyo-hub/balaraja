@@ -1,28 +1,39 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { formatCurrency, formatDate } from '../../utils/format';
-import api from '../../services/api';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { LoadingState, ErrorState, EmptyState } from '../../components/ui/States';
-import ResponsiveTable from '../../components/ui/ResponsiveTable';
+import api from '../../services/api';
+import PageHeader from '../../components/ui/PageHeader';
+import DataTable from '../../components/ui/DataTable';
 import Modal from '../../components/ui/Modal';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import SearchInput from '../../components/ui/SearchInput';
+import Select from '../../components/ui/Select';
+import DateInput from '../../components/ui/DateInput';
+import Input from '../../components/ui/Input';
+import MoneyInput from '../../components/ui/MoneyInput';
+import FormField from '../../components/ui/FormField';
+import Button from '../../components/ui/Button';
+import IconButton from '../../components/ui/IconButton';
+import Badge from '../../components/ui/Badge';
+import Money from '../../components/ui/Money';
+import { EmptyState } from '../../components/ui/States';
+import { formatCurrency, formatDate, formatDateShort, todayInput } from '../../lib/format';
 
 // Sama seperti PaymentsPage: `value` harus sama persis dengan enum di
 // database `supplier_payments.method` (cash/transfer/other).
-const metodeOptions = [
+const METODE_OPTIONS = [
   { value: 'cash', label: 'Tunai', icon: 'account_balance_wallet' },
   { value: 'transfer', label: 'Transfer', icon: 'swap_horiz' },
   { value: 'other', label: 'Lainnya', icon: 'description' },
 ];
 
 function metodeLabel(value) {
-  return metodeOptions.find((m) => m.value === value)?.label || value || '-';
+  return METODE_OPTIONS.find((m) => m.value === value)?.label || value || '-';
 }
 
-const today = () => new Date().toISOString().split('T')[0];
-
 const emptyForm = () => ({
-  date: today(),
+  date: todayInput(),
   supplier_id: '',
   purchase_id: '',
   amount: '',
@@ -32,15 +43,18 @@ const emptyForm = () => ({
 
 export default function SupplierPaymentsPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [filters, setFilters] = useState({
     start_date: '',
     end_date: '',
     supplier_id: '',
   });
   const [form, setForm] = useState(emptyForm);
+  const [purchaseSearch, setPurchaseSearch] = useState('');
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['supplier-payments', filters],
@@ -56,10 +70,7 @@ export default function SupplierPaymentsPage() {
 
   const { data: suppliers } = useQuery({
     queryKey: ['suppliers'],
-    queryFn: async () => {
-      const res = await api.get('/suppliers');
-      return res.data;
-    },
+    queryFn: async () => (await api.get('/suppliers')).data,
   });
 
   // Hanya transaksi yang masih punya utang. `has_debt=1` memfilter
@@ -69,7 +80,6 @@ export default function SupplierPaymentsPage() {
   // `per_page` 200 adalah batas server, dan kotak pencarian di bawah menutup
   // sisanya: tanpa pencarian, transaksi urutan ke-201 benar-benar tidak bisa
   // dipilih.
-  const [purchaseSearch, setPurchaseSearch] = useState('');
   const { data: purchasesData, isFetching: isLoadingPurchases } = useQuery({
     queryKey: ['supplier-debt-purchases', form.supplier_id, purchaseSearch],
     queryFn: async () => {
@@ -86,8 +96,11 @@ export default function SupplierPaymentsPage() {
     enabled: !!form.supplier_id,
   });
 
-  const supplierList = suppliers?.data || suppliers || [];
-  const fetchedPurchases = purchasesData?.data || purchasesData || [];
+  const supplierList = useMemo(() => suppliers?.data || suppliers || [], [suppliers]);
+  const fetchedPurchases = useMemo(
+    () => purchasesData?.data || purchasesData || [],
+    [purchasesData]
+  );
 
   // Dropdown sengaja dibatasi ke transaksi yang masih punya utang, karena
   // listing semua pembelian akan membuat kasir memilih transaksi yang sudah
@@ -96,15 +109,18 @@ export default function SupplierPaymentsPage() {
   // tidak ada di daftar - select akan kosong, sisa utangnya tidak terbaca,
   // dan batas nominal jadi nol. Jadi transaksi yang sedang diedit selalu
   // ditambahkan balik, dengan label yang jelas menandai kondisinya.
-  const purchaseList = [...fetchedPurchases];
-  if (editItem?.purchase && !fetchedPurchases.some((p) => p.id === editItem.purchase.id)) {
-    const payable = Number(editItem.purchase.payable ?? 0);
-    purchaseList.push({
-      ...editItem.purchase,
-      is_settled: payable <= 0,
-    });
-  }
-  const selectedPurchase = purchaseList.find((p) => p.id === Number(form.purchase_id));
+  const purchaseList = useMemo(() => {
+    const list = [...fetchedPurchases];
+    if (editItem?.purchase && !list.some((purchase) => purchase.id === editItem.purchase.id)) {
+      list.push({
+        ...editItem.purchase,
+        is_settled: Number(editItem.purchase.payable ?? 0) <= 0,
+      });
+    }
+    return list;
+  }, [fetchedPurchases, editItem]);
+
+  const selectedPurchase = purchaseList.find((purchase) => purchase.id === Number(form.purchase_id));
 
   // Saat menambah pembayaran baru, nominal maksimal adalah sisa utang.
   // Saat MENGEDIT, pembayaran lama sudah mengurangi sisa utang itu, jadi
@@ -112,10 +128,16 @@ export default function SupplierPaymentsPage() {
   // kalau tidak, user tidak akan bisa menambah nominal pembayaran yang sudah
   // ada tanpa menurunkannya dulu.
   const ownAmount = editItem ? Number(editItem.amount) || 0 : 0;
-  const maxAmount = (selectedPurchase?.payable ?? 0) + ownAmount;
+  const maxAmount = (Number(selectedPurchase?.payable ?? 0) || 0) + ownAmount;
 
-  const payments = data?.data || data || [];
-  const hasFilter = !!(filters.start_date || filters.end_date || filters.supplier_id);
+  const payments = useMemo(() => data?.data || data || [], [data]);
+  const hasFilter = Boolean(filters.start_date || filters.end_date || filters.supplier_id);
+
+  const summary = useMemo(() => {
+    const total = payments.reduce((sum, item) => sum + Number(item.amount ?? 0), 0);
+    const supplierCount = new Set(payments.map((item) => item.supplier_id)).size;
+    return { total, count: payments.length, supplierCount };
+  }, [payments]);
 
   const mutation = useMutation({
     mutationFn: async (payload) => {
@@ -128,9 +150,7 @@ export default function SupplierPaymentsPage() {
     },
     onSuccess: () => {
       toast.success(editItem ? 'Pelunasan berhasil diperbarui' : 'Pelunasan berhasil disimpan');
-      setShowForm(false);
-      setEditItem(null);
-      setForm(emptyForm());
+      closeForm();
       // Sisa utang ada di purchases DAN di kartu supplier, jadi keduanya
       // harus disegarkan. Kalau tidak, daftar pelunasan yang baru saja
       // diperbarui masih menampilkan sisa utang lama.
@@ -153,7 +173,7 @@ export default function SupplierPaymentsPage() {
     },
     onSuccess: () => {
       toast.success('Pelunasan berhasil dihapus');
-      setDeleteConfirm(null);
+      setDeleteTarget(null);
       queryClient.invalidateQueries({ queryKey: ['supplier-payments'] });
       queryClient.invalidateQueries({ queryKey: ['purchases'] });
       queryClient.invalidateQueries({ queryKey: ['supplier-debt-purchases'] });
@@ -161,35 +181,40 @@ export default function SupplierPaymentsPage() {
     },
     onError: (err) => {
       toast.error(err.response?.data?.message || 'Gagal menghapus pelunasan');
+      setDeleteTarget(null);
     },
   });
 
-  const closeForm = () => {
+  function closeForm() {
     setShowForm(false);
     setEditItem(null);
-  };
+    setForm(emptyForm());
+    setPurchaseSearch('');
+  }
 
-  const openCreate = () => {
+  function openCreate() {
     setEditItem(null);
     setForm(emptyForm());
+    setPurchaseSearch('');
     setShowForm(true);
-  };
+  }
 
-  const openEdit = (item) => {
+  function openEdit(item) {
     setEditItem(item);
     setForm({
-      date: item.date?.split('T')[0] || item.date,
+      date: item.date ? String(item.date).slice(0, 10) : todayInput(),
       supplier_id: item.supplier_id || '',
       purchase_id: item.purchase_id || '',
-      amount: String(item.amount || ''),
+      amount: Number(item.amount || 0),
       method: item.method || 'cash',
       note: item.note || '',
     });
+    setPurchaseSearch('');
     setShowForm(true);
-  };
+  }
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  function handleSubmit(event) {
+    event.preventDefault();
     if (!form.supplier_id) {
       toast.error('Pilih supplier terlebih dahulu');
       return;
@@ -198,370 +223,447 @@ export default function SupplierPaymentsPage() {
       toast.error('Pilih transaksi pembelian terlebih dahulu');
       return;
     }
-    const amt = Number(form.amount) || 0;
-    if (amt <= 0) {
+    const amount = Number(form.amount) || 0;
+    if (amount <= 0) {
       toast.error('Nominal harus lebih dari 0');
       return;
     }
     // Penjaga di frontend supaya user dapat pesan langsung; server tetap
     // memvalidasi ulang karena angka di form bisa saja usang.
-    if (amt > maxAmount + 0.005) {
+    if (amount > maxAmount + 0.005) {
       toast.error(`Nominal maksimal adalah ${formatCurrency(maxAmount)}`);
       return;
     }
-    mutation.mutate({ ...form, id: editItem?.id, amount: amt });
-  };
+    mutation.mutate({
+      id: editItem?.id,
+      date: form.date,
+      supplier_id: form.supplier_id,
+      purchase_id: form.purchase_id,
+      amount,
+      method: form.method,
+      note: form.note || null,
+    });
+  }
+
+  // Halaman "Utang Supplier" mengarahkan ke sini dengan ?purchase=<id> agar
+  // transaksi yang mau dilunasi langsung terpilih. Parameter itu dibersihkan
+  // supaya me-refresh halaman tidak membuka form lagi.
+  useEffect(() => {
+    const purchaseId = searchParams.get('purchase');
+    if (!purchaseId) return;
+
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete('purchase');
+      return next;
+    }, { replace: true });
+
+    const fetchPurchase = async () => {
+      try {
+        const res = await api.get(`/purchases/${purchaseId}`);
+        const purchase = res.data;
+        setEditItem(null);
+        setForm({
+          date: todayInput(),
+          supplier_id: purchase.supplier_id || '',
+          purchase_id: purchase.id,
+          amount: '',
+          method: 'cash',
+          note: '',
+        });
+        setPurchaseSearch('');
+        setShowForm(true);
+      } catch {
+        toast.error('Transaksi pembelian tidak bisa dimuat');
+      }
+    };
+
+    fetchPurchase();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const columns = [
+    {
+      key: 'payment_number',
+      header: 'No. Pelunasan',
+      sortable: true,
+      render: (item) => (
+        <div className="min-w-0">
+          <p className="font-medium text-on-surface truncate">{item.payment_number}</p>
+          <p className="text-2xs text-on-surface-variant truncate">{formatDateShort(item.date)}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'supplier',
+      header: 'Supplier',
+      render: (item) => (
+        <span className="text-on-surface-variant truncate">{item.supplier?.name || '-'}</span>
+      ),
+    },
+    {
+      key: 'purchase',
+      header: 'Transaksi',
+      render: (item) => (
+        <span className="text-on-surface-variant truncate">{item.purchase?.purchase_number || '-'}</span>
+      ),
+    },
+    {
+      key: 'amount',
+      header: 'Nominal',
+      align: 'right',
+      sortable: true,
+      render: (item) => <Money value={item.amount} variant="strong" />,
+    },
+    {
+      key: 'payable',
+      header: 'Sisa Utang',
+      align: 'right',
+      sortable: true,
+      sortValue: (item) => Number(item.purchase?.payable ?? 0),
+      render: (item) =>
+        Number(item.purchase?.payable ?? 0) > 0 ? (
+          <Money value={item.purchase.payable} variant="danger" />
+        ) : (
+          <span className="text-success text-xs font-medium">Lunas</span>
+        ),
+    },
+    {
+      key: 'method',
+      header: 'Metode',
+      render: (item) => (
+        <Badge tone="neutral" size="sm" icon={METODE_OPTIONS.find((m) => m.value === item.method)?.icon}>
+          {metodeLabel(item.method)}
+        </Badge>
+      ),
+    },
+    {
+      key: 'aksi',
+      header: 'Aksi',
+      align: 'right',
+      render: (item) => (
+        <div className="flex items-center justify-end gap-0.5">
+          <IconButton
+            icon="edit"
+            label={`Edit ${item.payment_number}`}
+            size="sm"
+            tone="primary"
+            onClick={() => openEdit(item)}
+          />
+          <IconButton
+            icon="delete"
+            label={`Hapus ${item.payment_number}`}
+            size="sm"
+            tone="danger"
+            onClick={() => setDeleteTarget(item)}
+          />
+        </div>
+      ),
+    },
+  ];
 
   return (
-    <main className="px-4 py-6 max-w-4xl mx-auto space-y-4">
-      <div className="mb-6">
-        <h2 className="text-lg font-semibold text-primary">Pelunasan Utang</h2>
-        <p className="text-sm text-on-surface-variant mt-1">Pembayaran ke supplier untuk pembelian yang belum lunas</p>
+    <div className="space-y-4">
+      <PageHeader
+        title="Pelunasan Utang"
+        subtitle="Riwayat pembayaran kepada supplier untuk pembelian yang belum lunas"
+        breadcrumbs={[{ label: 'Keuangan', to: '/piutang' }, { label: 'Pelunasan Utang' }]}
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              icon="price_change"
+              onClick={() => navigate('/utang')}
+            >
+              Lihat Utang
+            </Button>
+            <Button icon="add" size="sm" onClick={openCreate}>
+              Tambah Pelunasan
+            </Button>
+          </>
+        }
+      />
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <DateInput
+          value={filters.start_date}
+          onChange={(value) => setFilters((f) => ({ ...f, start_date: value }))}
+          aria-label="Tanggal mulai"
+          placeholder="Mulai"
+        />
+        <DateInput
+          value={filters.end_date}
+          onChange={(value) => setFilters((f) => ({ ...f, end_date: value }))}
+          aria-label="Tanggal akhir"
+          placeholder="Akhir"
+        />
+        <Select
+          value={filters.supplier_id}
+          onChange={(event) => setFilters((f) => ({ ...f, supplier_id: event.target.value }))}
+          aria-label="Filter supplier"
+        >
+          <option value="">Semua supplier</option>
+          {supplierList.map((supplier) => (
+            <option key={supplier.id} value={supplier.id}>
+              {supplier.name}
+            </option>
+          ))}
+        </Select>
       </div>
 
-      <div className="bg-surface-container-lowest p-3 rounded-xl shadow-sm border border-outline-variant/30 flex flex-col gap-3">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-on-surface-variant mb-1.5" htmlFor="sp-mulai">Tanggal Mulai</label>
-            <div className="relative">
-              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-lg">calendar_today</span>
-              <input
-                id="sp-mulai"
-                type="date"
-                value={filters.start_date}
-                onChange={(e) => setFilters((f) => ({ ...f, start_date: e.target.value }))}
-                className="w-full h-10 pl-11 pr-3 bg-surface text-on-surface rounded-xl border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm transition"
-              />
-            </div>
+      {summary.count > 0 && (
+        <div className="grid grid-cols-3 gap-3">
+          <div className="rounded-card border border-outline-variant/70 bg-surface-container-lowest px-3.5 py-3">
+            <p className="text-2xs uppercase tracking-wide text-on-surface-variant">Total Dibayar</p>
+            <Money value={summary.total} variant="strong" className="text-base mt-1 block" />
           </div>
-          <div>
-            <label className="block text-xs font-medium text-on-surface-variant mb-1.5" htmlFor="sp-akhir">Tanggal Akhir</label>
-            <div className="relative">
-              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-lg">calendar_today</span>
-              <input
-                id="sp-akhir"
-                type="date"
-                value={filters.end_date}
-                onChange={(e) => setFilters((f) => ({ ...f, end_date: e.target.value }))}
-                className="w-full h-10 pl-11 pr-3 bg-surface text-on-surface rounded-xl border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm transition"
-              />
-            </div>
+          <div className="rounded-card border border-outline-variant/70 bg-surface-container-lowest px-3.5 py-3">
+            <p className="text-2xs uppercase tracking-wide text-on-surface-variant">Pelunasan</p>
+            <p className="text-base font-semibold text-on-surface mt-1">{summary.count}</p>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-on-surface-variant mb-1.5" htmlFor="sp-supplier">Supplier</label>
-            <div className="relative">
-              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-lg">local_shipping</span>
-              <select
-                id="sp-supplier"
-                value={filters.supplier_id}
-                onChange={(e) => setFilters((f) => ({ ...f, supplier_id: e.target.value }))}
-                className="w-full h-10 pl-11 pr-3 bg-surface text-on-surface rounded-xl border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm transition appearance-none"
-              >
-                <option value="">Semua Supplier</option>
-                {supplierList.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            </div>
+          <div className="rounded-card border border-outline-variant/70 bg-surface-container-lowest px-3.5 py-3">
+            <p className="text-2xs uppercase tracking-wide text-on-surface-variant">Supplier</p>
+            <p className="text-base font-semibold text-on-surface mt-1">{summary.supplierCount}</p>
           </div>
         </div>
-      </div>
+      )}
 
-      {isLoading ? (
-        <div className="bg-surface rounded-xl border border-surface-container-high p-4">
-          <LoadingState rows={4} />
-        </div>
-      ) : isError ? (
-        <ErrorState error={error} onRetry={() => refetch()} title="Gagal memuat pelunasan" />
-      ) : (
-        <ResponsiveTable
-          label="Daftar pelunasan utang supplier"
-          rows={payments}
-          cellClass="px-4 py-3"
-          theadClass=""
-          tbodyClass="divide-y divide-surface-container-high"
-          rowClass="hover:bg-surface-container-low transition-colors"
-          emptyState={
+      <DataTable
+        columns={columns}
+        rows={payments}
+        rowKey={(row) => row.id}
+        loading={isLoading}
+        minWidth="900px"
+        emptyState={
+          isError ? (
+            <div role="alert" className="py-6 text-center">
+              <p className="text-sm font-medium text-danger">Gagal memuat pelunasan</p>
+              <p className="text-xs text-on-surface-variant mt-1">
+                {error?.response?.status
+                  ? `Server merespons dengan kesalahan (${error.response.status}).`
+                  : 'Periksa koneksi internet Anda lalu coba lagi.'}
+              </p>
+              <Button size="sm" variant="outline" icon="refresh" className="mt-3" onClick={() => refetch()}>
+                Coba Lagi
+              </Button>
+            </div>
+          ) : (
             <EmptyState
-              icon="local_shipping"
-              title={hasFilter ? 'Tidak ada pelunasan yang cocok' : 'Belum ada pelunasan'}
+              icon="handshake"
+              title={hasFilter ? 'Pelunasan tidak ditemukan' : 'Belum ada pelunasan'}
               description={
                 hasFilter
                   ? 'Coba ubah atau kosongkan filter tanggal dan supplier.'
                   : 'Catatan pembayaran ke supplier akan muncul di sini.'
               }
+              action={
+                <Button size="sm" icon="add" onClick={openCreate}>
+                  Tambah Pelunasan
+                </Button>
+              }
             />
-          }
-          columns={[
-            { key: 'no', header: 'No', render: (item, idx) => idx + 1, cellClass: 'text-on-surface-variant' },
-            { key: 'no_pay', header: 'No Pelunasan', render: (item) => item.payment_number, cellClass: 'font-medium text-on-surface' },
-            { key: 'tanggal', header: 'Tanggal', render: (item) => formatDate(item.date), cellClass: 'text-on-surface-variant' },
-            { key: 'supplier', header: 'Supplier', render: (item) => item.supplier?.name || '-', cellClass: 'text-on-surface-variant' },
-            { key: 'trx', header: 'Transaksi', render: (item) => item.purchase?.purchase_number || '-', cellClass: 'text-on-surface-variant' },
-            { key: 'nominal', header: 'Nominal', align: 'right', render: (item) => formatCurrency(item.amount), cellClass: 'font-medium text-on-surface tabular-nums' },
-            {
-              key: 'sisa', header: 'Sisa Utang', align: 'right',
-              render: (item) => (
-                <span className={`tabular-nums ${Number(item.purchase?.payable) > 0 ? 'text-error font-medium' : 'text-success'}`}>
-                  {formatCurrency(item.purchase?.payable ?? 0)}
-                </span>
+          )
+        }
+        cardTitle={(item) => item.payment_number}
+        cardMeta={(item) => `${item.supplier?.name || '-'} · ${formatDate(item.date)}`}
+        cardBadge={(item) => <Money value={item.amount} variant="strong" />}
+        cardFields={[
+          { label: 'Transaksi', render: (item) => item.purchase?.purchase_number || '-' },
+          { label: 'Metode', render: (item) => metodeLabel(item.method) },
+          {
+            label: 'Sisa Utang',
+            render: (item) =>
+              Number(item.purchase?.payable ?? 0) > 0 ? (
+                <Money value={item.purchase.payable} variant="danger" />
+              ) : (
+                <span className="text-success text-xs font-medium">Lunas</span>
               ),
-            },
-            {
-              key: 'metode', header: 'Metode',
-              render: (item) => (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-surface-container-high text-on-surface-variant">
-                  <span className="material-symbols-outlined text-sm">{metodeOptions.find((m) => m.value === item.method)?.icon || 'help'}</span>
-                  {metodeLabel(item.method)}
-                </span>
-              ),
-            },
-            {
-              key: 'aksi', header: 'Aksi', align: 'center',
-              render: (item) => (
-                <div className="flex items-center justify-center gap-1">
-                  <button onClick={() => openEdit(item)} className="w-8 h-8 rounded-full flex items-center justify-center text-outline hover:bg-surface-variant hover:text-primary transition-colors" title="Edit">
-                    <span className="material-symbols-outlined text-[18px]">edit</span>
-                  </button>
-                  <button onClick={() => setDeleteConfirm(item)} className="w-8 h-8 rounded-full flex items-center justify-center text-outline hover:bg-error-container hover:text-error transition-colors" title="Hapus">
-                    <span className="material-symbols-outlined text-[18px]">delete</span>
-                  </button>
-                </div>
-              ),
-            },
-          ]}
-          cardTitle={(item) => item.payment_number}
-          cardMeta={(item) => `${item.supplier?.name || '-'} · ${formatDate(item.date)}`}
-          cardBadge={(item) => (
-            <span className="text-sm font-bold text-on-surface tabular-nums">{formatCurrency(item.amount)}</span>
-          )}
-          cardFields={[
-            { label: 'Transaksi', render: (item) => item.purchase?.purchase_number || '-' },
-            { label: 'Metode', render: (item) => <span>{metodeLabel(item.method)}</span> },
-            {
-              label: 'Sisa Utang',
-              render: (item) => (
-                <span className={Number(item.purchase?.payable) > 0 ? 'text-error font-medium tabular-nums' : 'text-success tabular-nums'}>
-                  {formatCurrency(item.purchase?.payable ?? 0)}
-                </span>
-              ),
-            },
-          ]}
-          cardActions={(item) => (
-            <>
-              <button onClick={() => openEdit(item)} className="flex-1 py-2.5 text-xs font-medium text-primary hover:bg-surface-container-high transition-colors flex items-center justify-center gap-1.5">
-                <span className="material-symbols-outlined text-[16px]">edit</span> Edit
-              </button>
-              <button onClick={() => setDeleteConfirm(item)} className="flex-1 py-2.5 text-xs font-medium text-error hover:bg-error-container transition-colors flex items-center justify-center gap-1.5">
-                <span className="material-symbols-outlined text-[16px]">delete</span> Hapus
-              </button>
-            </>
-          )}
-        />
-      )}
-
-      <button
-        onClick={openCreate}
-        className="fixed bottom-24 right-4 md:bottom-8 md:right-8 w-14 h-14 bg-primary text-on-primary rounded-2xl shadow-[0_8px_12px_-4px_rgba(0,0,0,0.1)] flex items-center justify-center hover:scale-105 active:scale-95 transition-all z-40"
-        title="Tambah pelunasan"
-      >
-        <span className="material-symbols-outlined text-[28px]">add</span>
-      </button>
+          },
+        ]}
+        cardActions={(item) => (
+          <>
+            <button
+              type="button"
+              onClick={() => openEdit(item)}
+              className="flex-1 py-3 text-xs font-medium text-primary hover:bg-surface-container transition-colors flex items-center justify-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-[16px]" aria-hidden="true">
+                edit
+              </span>
+              Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => setDeleteTarget(item)}
+              className="flex-1 py-3 text-xs font-medium text-danger hover:bg-danger-container transition-colors flex items-center justify-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-[16px]" aria-hidden="true">
+                delete
+              </span>
+              Hapus
+            </button>
+          </>
+        )}
+      />
 
       {showForm && (
-        <Modal onClose={closeForm} title="Form pelunasan utang" variant="sheet" zIndex={60} panelClassName="bg-surface w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[85vh]" initialFocus='input, select, textarea'>
-            <div className="flex items-center justify-between px-6 pt-6 pb-2">
-              <h3 className="text-on-surface text-lg font-semibold">{editItem ? 'Edit Pelunasan' : 'Tambah Pelunasan'}</h3>
-              <button onClick={closeForm} className="p-2 rounded-xl text-outline hover:bg-surface-container-high transition-colors">
-                <span className="material-symbols-outlined">close</span>
-              </button>
-            </div>
-            <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1 overflow-hidden">
-            <div className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
-                <div>
-                  <label className="block text-xs font-medium text-on-surface-variant mb-1.5" htmlFor="sp-tanggal">Tanggal</label>
-                  <div className="relative">
-                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-lg">calendar_today</span>
-                    <input
-                      id="sp-tanggal"
-                      type="date"
-                      value={form.date}
-                      onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
-                      className="w-full h-12 pl-11 pr-3 bg-surface text-on-surface rounded-xl border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm transition"
-                      required
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-on-surface-variant mb-1.5" htmlFor="sp-form-supplier">Supplier</label>
-                  <div className="relative">
-                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-lg">local_shipping</span>
-                    <select
-                      id="sp-form-supplier"
-                      value={form.supplier_id}
-                      onChange={(e) => {
-                        setForm((f) => ({ ...f, supplier_id: e.target.value, purchase_id: '', amount: '' }));
-                        setPurchaseSearch('');
-                      }}
-                      className="w-full h-12 pl-11 pr-3 bg-surface text-on-surface rounded-xl border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm transition appearance-none"
-                      required
-                      disabled={!!editItem}
-                    >
-                      <option value="">Pilih Supplier</option>
-                      {supplierList.map((s) => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  {editItem && (
-                    <p className="text-xs text-on-surface-variant mt-1">
-                      Supplier tidak bisa diubah. Hapus pelunasan ini lalu buat yang baru jika salah supplier.
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-on-surface-variant mb-1.5" htmlFor="sp-trx">Transaksi Pembelian</label>
-                  <select
-                    id="sp-trx"
-                    value={form.purchase_id}
-                    onChange={(e) => setForm((f) => ({ ...f, purchase_id: e.target.value, amount: '' }))}
-                    className="w-full h-12 px-4 bg-surface text-on-surface rounded-xl border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm transition appearance-none"
-                    required
-                    disabled={!form.supplier_id}
-                  >
-                    <option value="">
-                      {form.supplier_id
-                        ? 'Pilih Transaksi'
-                        : 'Pilih supplier terlebih dahulu'}
-                    </option>
-                    {purchaseList.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.purchase_number} — sisa {formatCurrency(p.payable)}
-                        {p.is_settled ? ' (sudah lunas)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="search"
-                    value={purchaseSearch}
-                    onChange={(e) => setPurchaseSearch(e.target.value)}
-                    placeholder="Cari nomor transaksi..."
-                    aria-label="Cari nomor transaksi pembelian"
-                    className="w-full h-10 px-3 mt-2 bg-surface text-on-surface rounded-lg border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm transition placeholder:text-outline"
-                  />
-                  {form.supplier_id && !isLoadingPurchases && purchaseList.length === 0 && (
-                    <p className="text-xs text-on-surface-variant mt-1">
-                      {purchaseSearch.trim()
-                        ? 'Tidak ada transaksi yang cocok dengan pencarian itu.'
-                        : 'Semua transaksi dari supplier ini sudah lunas.'}
-                    </p>
-                  )}
-                  {selectedPurchase?.is_settled && (
-                    <p className="text-xs text-warning mt-1">
-                      Transaksi ini sudah lunas. Nominal hanya bisa dikurangi atau tetap,
-                      tidak boleh ditambah.
-                    </p>
-                  )}
-                </div>
-                {selectedPurchase && (
-                  <div className="bg-surface-container-low rounded-xl px-4 py-3 flex items-center justify-between">
-                    <span className="text-xs text-on-surface-variant">Sisa utang transaksi ini</span>
-                    <span className="text-sm font-semibold text-on-surface tabular-nums">
-                      {formatCurrency(selectedPurchase.payable)}
-                    </span>
-                  </div>
-                )}
-                <div>
-                  <label className="block text-xs font-medium text-on-surface-variant mb-1.5" htmlFor="sp-nominal">Nominal (Rp)</label>
-                  <input
-                    id="sp-nominal"
-                    type="number"
-                    min="1"
-                    step="0.01"
-                    max={maxAmount || undefined}
-                    value={form.amount}
-                    onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
-                    className="w-full h-12 px-4 bg-surface text-on-surface placeholder-outline rounded-xl border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm transition"
-                    required
-                  />
-                  {selectedPurchase && (
-                    <p className="text-xs text-on-surface-variant mt-1">
-                      Maksimal {formatCurrency(maxAmount)}
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Metode Pembayaran</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {metodeOptions.map((m) => (
-                      <button
-                        key={m.value}
-                        type="button"
-                        onClick={() => setForm((f) => ({ ...f, method: m.value }))}
-                        className={`flex items-center justify-center gap-1.5 h-12 rounded-xl text-xs font-semibold transition-colors ${
-                          form.method === m.value
-                            ? 'bg-primary text-on-primary'
-                            : 'border border-outline-variant text-on-surface-variant hover:bg-surface-container-high'
-                        }`}
-                      >
-                        <span className="material-symbols-outlined text-base">{m.icon}</span>
-                        {m.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-on-surface-variant mb-1.5" htmlFor="sp-catatan">Catatan</label>
-                  <textarea
-                    id="sp-catatan"
-                    value={form.note}
-                    onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
-                    className="w-full px-4 py-3 bg-surface text-on-surface placeholder-outline rounded-xl border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm transition resize-none"
-                    rows={2}
-                    placeholder="Catatan opsional..."
-                  />
-                </div>
-              </div>
-            <div className="shrink-0 bg-surface border-t border-outline-variant/30 px-6 py-3 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={closeForm}
-                className="h-10 px-5 text-sm font-medium text-primary bg-transparent hover:bg-primary/10 rounded-xl transition-colors"
-              >
+        <Modal
+          onClose={closeForm}
+          title={editItem ? 'Edit Pelunasan' : 'Tambah Pelunasan'}
+          subtitle="Pembayaran dicatat terhadap satu transaksi pembelian"
+          variant="sheet"
+          footer={
+            <>
+              <Button variant="outline" size="sm" onClick={closeForm}>
                 Batal
-              </button>
-              <button
-                type="submit"
-                disabled={mutation.isPending}
-                className="h-10 px-5 text-sm font-medium text-on-primary bg-primary hover:bg-primary/90 rounded-xl transition-colors disabled:opacity-50 flex items-center gap-2"
+              </Button>
+              <Button size="sm" onClick={handleSubmit} loading={mutation.isPending}>
+                Simpan
+              </Button>
+            </>
+          }
+        >
+          <form onSubmit={handleSubmit} className="space-y-3.5">
+            <FormField label="Tanggal" required>
+              <DateInput
+                value={form.date}
+                onChange={(value) => setForm({ ...form, date: value })}
+                required
+              />
+            </FormField>
+
+            <FormField
+              label="Supplier"
+              required
+              hint={
+                editItem
+                  ? 'Supplier tidak bisa diubah. Hapus pelunasan ini lalu buat yang baru jika salah supplier.'
+                  : undefined
+              }
+            >
+              <Select
+                value={form.supplier_id}
+                onChange={(event) => {
+                  setForm({ ...form, supplier_id: event.target.value, purchase_id: '', amount: '' });
+                  setPurchaseSearch('');
+                }}
+                disabled={Boolean(editItem)}
+                required
               >
-                <span className="material-symbols-outlined text-base">credit_card</span>
-                {mutation.isPending ? 'Menyimpan...' : 'Simpan'}
-              </button>
-            </div>
-            </form>
+                <option value="">Pilih supplier</option>
+                {supplierList.map((supplier) => (
+                  <option key={supplier.id} value={supplier.id}>
+                    {supplier.name}
+                  </option>
+                ))}
+              </Select>
+            </FormField>
+
+            <FormField
+              label="Transaksi pembelian"
+              required
+              hint={
+                !form.supplier_id
+                  ? 'Pilih supplier dulu untuk melihat transaksi yang masih berutang.'
+                  : purchaseList.length === 0 && !isLoadingPurchases
+                    ? purchaseSearch.trim()
+                      ? 'Tidak ada transaksi yang cocok dengan pencarian itu.'
+                      : 'Semua transaksi dari supplier ini sudah lunas.'
+                    : undefined
+              }
+            >
+              <Select
+                value={form.purchase_id}
+                onChange={(event) => setForm({ ...form, purchase_id: event.target.value, amount: '' })}
+                disabled={!form.supplier_id}
+                required
+              >
+                <option value="">
+                  {form.supplier_id ? 'Pilih transaksi' : 'Pilih supplier terlebih dahulu'}
+                </option>
+                {purchaseList.map((purchase) => (
+                  <option key={purchase.id} value={purchase.id}>
+                    {purchase.purchase_number} — sisa {formatCurrency(purchase.payable)}
+                    {purchase.is_settled ? ' (sudah lunas)' : ''}
+                  </option>
+                ))}
+              </Select>
+              {form.supplier_id && (
+                <div className="mt-2">
+                  <SearchInput
+                    value={purchaseSearch}
+                    onChange={setPurchaseSearch}
+                    placeholder="Cari nomor transaksi…"
+                    aria-label="Cari nomor transaksi pembelian"
+                  />
+                </div>
+              )}
+            </FormField>
+
+            {selectedPurchase && (
+              <div className="rounded-field bg-surface-container px-3.5 py-3 flex items-center justify-between">
+                <span className="text-xs text-on-surface-variant">Sisa utang transaksi ini</span>
+                <Money value={selectedPurchase.payable} variant="strong" className="text-sm" />
+              </div>
+            )}
+
+            <FormField
+              label="Nominal"
+              required
+              hint={selectedPurchase ? `Maksimal ${formatCurrency(maxAmount)}` : undefined}
+            >
+              <MoneyInput
+                value={form.amount}
+                onChange={(value) => setForm({ ...form, amount: value })}
+                disabled={!form.purchase_id}
+              />
+            </FormField>
+
+            <FormField label="Metode pembayaran" required>
+              <div className="grid grid-cols-3 gap-2">
+                {METODE_OPTIONS.map((method) => (
+                  <button
+                    key={method.value}
+                    type="button"
+                    onClick={() => setForm({ ...form, method: method.value })}
+                    aria-pressed={form.method === method.value}
+                    className={`flex items-center justify-center gap-1.5 h-11 rounded-field text-xs font-semibold transition-colors ${
+                      form.method === method.value
+                        ? 'bg-primary text-on-primary'
+                        : 'border border-outline-variant text-on-surface-variant hover:bg-surface-container-high'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-base" aria-hidden="true">
+                      {method.icon}
+                    </span>
+                    {method.label}
+                  </button>
+                ))}
+              </div>
+            </FormField>
+
+            <FormField label="Catatan">
+              <Input
+                value={form.note}
+                onChange={(event) => setForm({ ...form, note: event.target.value })}
+                placeholder="Catatan opsional"
+              />
+            </FormField>
+          </form>
         </Modal>
       )}
 
-      {deleteConfirm && (
-        <Modal onClose={() => setDeleteConfirm(null)} title="Konfirmasi hapus pelunasan" variant="center" zIndex={70} panelClassName="bg-surface rounded-xl shadow-xl w-full max-w-sm p-6 mx-4">
-            <div className="flex items-center gap-3 mb-4">
-              <span className="material-symbols-outlined text-error text-2xl">delete</span>
-              <h3 className="text-lg font-bold text-on-surface">Hapus Pelunasan?</h3>
-            </div>
-            <p className="text-sm text-on-surface-variant mb-6">
-              Pelunasan <strong>{deleteConfirm.payment_number}</strong> sebesar{' '}
-              <strong>{formatCurrency(deleteConfirm.amount)}</strong> akan dihapus dan sisa utang{' '}
-              {deleteConfirm.purchase?.purchase_number} bertambah kembali.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button onClick={() => setDeleteConfirm(null)} className="px-4 py-2 rounded-xl border border-outline-variant text-on-surface text-sm font-medium hover:bg-surface-container-high transition-colors">Batal</button>
-              <button onClick={() => deleteMutation.mutate(deleteConfirm.id)} disabled={deleteMutation.isPending} className="px-4 py-2 rounded-xl bg-error text-on-error text-sm font-medium hover:bg-error/90 transition-colors disabled:opacity-50">
-                {deleteMutation.isPending ? 'Menghapus...' : 'Hapus'}
-              </button>
-            </div>
-        </Modal>
-      )}
-    </main>
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteMutation.mutate(deleteTarget.id)}
+        title="Hapus pelunasan?"
+        message={`Pelunasan ${deleteTarget?.payment_number ?? ''} sebesar ${formatCurrency(deleteTarget?.amount ?? 0)} akan dihapus.`}
+        detail={`Sisa utang transaksi ${deleteTarget?.purchase?.purchase_number ?? ''} bertambah kembali.`}
+        confirmLabel="Hapus"
+        loading={deleteMutation.isPending}
+      />
+    </div>
   );
 }

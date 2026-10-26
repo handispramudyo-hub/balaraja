@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
-import { formatCurrency } from '../../utils/format';
+import { formatCurrency } from '../../lib/format';
 import api from '../../services/api';
 import { toast } from 'sonner';
 import {
@@ -11,6 +11,17 @@ import {
   priceIn,
   sellableUnits,
 } from '../../components/products/unitRules';
+import PageHeader from '../../components/ui/PageHeader';
+import Button from '../../components/ui/Button';
+import IconButton from '../../components/ui/IconButton';
+import Badge from '../../components/ui/Badge';
+import Money from '../../components/ui/Money';
+import FormField from '../../components/ui/FormField';
+import Input from '../../components/ui/Input';
+import Select from '../../components/ui/Select';
+import DateInput from '../../components/ui/DateInput';
+import Textarea from '../../components/ui/Textarea';
+import MoneyInput from '../../components/ui/MoneyInput';
 
 export default function CreatePurchase() {
   const navigate = useNavigate();
@@ -211,185 +222,165 @@ export default function CreatePurchase() {
   };
 
   return (
-    <>
-      <form onSubmit={handleSubmit}>
-        <main className="pb-24 pt-2 max-w-md mx-auto space-y-6">
-          {/* Section 1: Informasi Pembelian */}
-          <section className="bg-surface-container-lowest p-4 rounded-xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.06)] border border-surface-container-low">
-            <h2 className="text-xl font-semibold text-on-surface mb-4">Informasi Pembelian</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-on-surface-variant mb-1">Supplier</label>
-                <div className="relative">
-                  <select
-                    value={form.supplier_id}
-                    onChange={(e) => setForm((f) => ({ ...f, supplier_id: e.target.value }))}
-                    className="w-full border border-outline-variant rounded-lg px-3 py-3 text-sm text-on-surface bg-transparent focus:border-primary focus:ring-1 focus:ring-primary appearance-none"
-                    required
-                  >
-                    <option value="">Pilih Supplier</option>
-                    {supplierList.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
-                  <span className="material-symbols-outlined absolute right-3 top-3 text-on-surface-variant pointer-events-none">arrow_drop_down</span>
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-on-surface-variant mb-1">Tanggal</label>
-                <input
-                  type="date"
+    <form onSubmit={handleSubmit} className="mx-auto max-w-4xl space-y-4 pb-28 md:pb-6">
+      <PageHeader
+        title={isEdit ? 'Edit Pembelian' : 'Pembelian Baru'}
+        subtitle="Catat barang masuk dan pembayaran ke supplier"
+        breadcrumbs={[
+          { label: 'Pembelian', to: '/pembelian' },
+          { label: isEdit ? 'Edit' : 'Tambah' },
+        ]}
+      />
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+        <div className="lg:col-span-2 space-y-4">
+          <section className="rounded-card border border-outline-variant/70 bg-surface-container-lowest p-4 space-y-3.5">
+            <h2 className="text-sm font-semibold text-on-surface">Informasi Pembelian</h2>
+
+            <FormField label="Supplier" required>
+              <Select
+                value={form.supplier_id}
+                onChange={(e) => setForm((f) => ({ ...f, supplier_id: e.target.value }))}
+                required
+              >
+                <option value="">Pilih supplier</option>
+                {supplierList.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </Select>
+            </FormField>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FormField label="Tanggal" required>
+                <DateInput
                   value={form.date}
-                  onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
-                  className="w-full border border-outline-variant rounded-lg px-3 py-3 text-sm text-on-surface bg-transparent focus:border-primary focus:ring-1 focus:ring-primary"
+                  onChange={(value) => setForm((f) => ({ ...f, date: value }))}
                   required
                 />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-on-surface-variant mb-1">Jatuh Tempo</label>
-                <input
-                  type="date"
+              </FormField>
+              <FormField
+                label="Jatuh Tempo"
+                hint="Kosongkan kalau dibayar penuh. Sisa utang muncul di daftar pembelian."
+              >
+                <DateInput
                   value={form.due_date}
                   min={form.date}
-                  onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))}
-                  className="w-full border border-outline-variant rounded-lg px-3 py-3 text-sm text-on-surface bg-transparent focus:border-primary focus:ring-1 focus:ring-primary"
+                  onChange={(value) => setForm((f) => ({ ...f, due_date: value }))}
                 />
-                <p className="text-xs text-on-surface-variant mt-1">
-                  Kosongkan kalau dibayar penuh. Sisa utang akan muncul di daftar pembelian.
-                </p>
-              </div>
-              {!isEdit && (
-                <>
-                  <div>
-                    <label className="block text-xs font-medium text-on-surface-variant mb-1">Sisa Utang</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setForm((f) => ({ ...f, installment_months: '' }))}
-                        className={`h-11 rounded-lg text-xs font-semibold transition-colors ${
-                          !form.installment_months
-                            ? 'bg-primary text-on-primary'
-                            : 'border border-outline-variant text-on-surface-variant'
-                        }`}
-                      >
-                        Bayar Penuh
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setForm((f) => ({ ...f, installment_months: f.installment_months || 3 }))
-                        }
-                        className={`h-11 rounded-lg text-xs font-semibold transition-colors ${
-                          form.installment_months
-                            ? 'bg-primary text-on-primary'
-                            : 'border border-outline-variant text-on-surface-variant'
-                        }`}
-                      >
-                        Cicilan
-                      </button>
-                    </div>
-                  </div>
-                  {form.installment_months ? (
-                    <div>
-                      <label className="block text-xs font-medium text-on-surface-variant mb-1">
-                        Jumlah Angsuran (bulan)
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="36"
-                        step="1"
-                        value={form.installment_months}
-                        onChange={(e) => setForm((f) => ({ ...f, installment_months: e.target.value }))}
-                        className="w-full border border-outline-variant rounded-lg px-3 py-3 text-sm text-on-surface bg-transparent focus:border-primary focus:ring-1 focus:ring-primary"
-                      />
-                      <p className="text-xs text-on-surface-variant mt-1">
-                        {total > 0 && Number(form.installment_months) > 0 ? (
-                          <>
-                            Sekitar{' '}
-                            <strong className="text-on-surface">
-                              {formatCurrency(
-                                Math.floor((total / Number(form.installment_months)) * 100) / 100,
-                              )}{' '}
-                              per bulan
-                            </strong>
-                            . Sisa pembulatan masuk ke angsuran terakhir.
-                          </>
-                        ) : (
-                          'Total dibagi rata, sisa pembulatan masuk ke angsuran terakhir.'
-                        )}
-                      </p>
-                    </div>
-                  ) : (
-                    <div>
-                      <label className="block text-xs font-medium text-on-surface-variant mb-1">
-                        Pembayaran Awal (DP)
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        max={total || undefined}
-                        value={form.payment}
-                        onChange={(e) => setForm((f) => ({ ...f, payment: e.target.value }))}
-                        className="w-full border border-outline-variant rounded-lg px-3 py-3 text-sm text-on-surface bg-transparent focus:border-primary focus:ring-1 focus:ring-primary"
-                        placeholder="0"
-                      />
-                      <p className="text-xs text-on-surface-variant mt-1">
-                        Sisa yang belum dibayar akan menjadi utang ke supplier.
-                      </p>
-                    </div>
-                  )}
-                  {Number(form.payment) > 0 && (
-                    <div>
-                      <label className="block text-xs font-medium text-on-surface-variant mb-1">Metode DP</label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {[
-                          { value: 'cash', label: 'Tunai' },
-                          { value: 'transfer', label: 'Transfer' },
-                          { value: 'other', label: 'Lainnya' },
-                        ].map((m) => (
-                          <button
-                            key={m.value}
-                            type="button"
-                            onClick={() => setForm((f) => ({ ...f, payment_method: m.value }))}
-                            className={`h-11 rounded-lg text-xs font-semibold transition-colors ${
-                              form.payment_method === m.value
-                                ? 'bg-primary text-on-primary'
-                                : 'border border-outline-variant text-on-surface-variant'
-                            }`}
-                          >
-                            {m.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-              <div>
-                <label className="block text-xs font-medium text-on-surface-variant mb-1">Catatan</label>
-                <textarea
-                  value={form.notes}
-                  onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                  className="w-full border border-outline-variant rounded-lg px-3 py-3 text-sm text-on-surface bg-transparent focus:border-primary focus:ring-1 focus:ring-primary"
-                  placeholder="Opsional"
-                  rows={2}
-                />
-              </div>
+              </FormField>
             </div>
+
+            {!isEdit && (
+              <>
+                <FormField label="Sisa Utang">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={!form.installment_months ? 'primary' : 'outline'}
+                      onClick={() => setForm((f) => ({ ...f, installment_months: '' }))}
+                    >
+                      Bayar Penuh
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={form.installment_months ? 'primary' : 'outline'}
+                      onClick={() =>
+                        setForm((f) => ({ ...f, installment_months: f.installment_months || 3 }))
+                      }
+                    >
+                      Cicilan
+                    </Button>
+                  </div>
+                </FormField>
+
+                {form.installment_months ? (
+                  <FormField
+                    label="Jumlah Angsuran (bulan)"
+                    hint={
+                      total > 0 && Number(form.installment_months) > 0
+                        ? `Sekitar ${formatCurrency(
+                            Math.floor((total / Number(form.installment_months)) * 100) / 100
+                          )} per bulan. Sisa pembulatan masuk ke angsuran terakhir.`
+                        : 'Total dibagi rata, sisa pembulatan masuk ke angsuran terakhir.'
+                    }
+                  >
+                    <Input
+                      type="number"
+                      min="1"
+                      max="36"
+                      step="1"
+                      value={form.installment_months}
+                      onChange={(e) => setForm((f) => ({ ...f, installment_months: e.target.value }))}
+                    />
+                  </FormField>
+                ) : (
+                  <FormField
+                    label="Pembayaran Awal (DP)"
+                    hint="Sisa yang belum dibayar akan menjadi utang ke supplier."
+                  >
+                    <MoneyInput
+                      value={form.payment}
+                      onChange={(value) => setForm((f) => ({ ...f, payment: value }))}
+                    />
+                  </FormField>
+                )}
+
+                {Number(form.payment) > 0 && (
+                  <FormField label="Metode DP">
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { value: 'cash', label: 'Tunai' },
+                        { value: 'transfer', label: 'Transfer' },
+                        { value: 'other', label: 'Lainnya' },
+                      ].map((m) => (
+                        <Button
+                          key={m.value}
+                          type="button"
+                          size="sm"
+                          variant={form.payment_method === m.value ? 'primary' : 'outline'}
+                          onClick={() => setForm((f) => ({ ...f, payment_method: m.value }))}
+                        >
+                          {m.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </FormField>
+                )}
+              </>
+            )}
+
+            <FormField label="Catatan">
+              <Textarea
+                value={form.notes}
+                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                placeholder="Opsional"
+                rows={2}
+              />
+            </FormField>
           </section>
 
-          {/* Section 2: Items */}
-          <section className="bg-surface-container-lowest p-4 rounded-xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.06)] border border-surface-container-low">
-            <h2 className="text-xl font-semibold text-on-surface mb-4">Daftar Item</h2>
+          <section className="rounded-card border border-outline-variant/70 bg-surface-container-lowest p-4 space-y-3.5">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-on-surface">Daftar Item</h2>
+              <Badge tone="neutral" size="sm">
+                {form.items.length} item
+              </Badge>
+            </div>
 
             {form.items.length === 0 ? (
-              <div className="text-center py-8 text-on-surface-variant text-sm">
-                Belum ada item. Klik "Tambah Item" untuk menambahkan.
+              <div className="rounded-field border border-dashed border-outline-variant bg-surface-container-low px-4 py-8 text-center">
+                <span className="material-symbols-outlined text-2xl text-outline" aria-hidden="true">
+                  inventory_2
+                </span>
+                <p className="mt-1 text-sm text-on-surface">Belum ada item</p>
+                <p className="text-xs text-on-surface-variant">
+                  Klik “Tambah Item” untuk menambahkan barang yang dibeli.
+                </p>
               </div>
             ) : (
-              <div className="space-y-4 mb-4">
+              <div className="space-y-3">
                 {form.items.map((item, idx) => {
                   const product = productList.find((p) => p.id === Number(item.product_id));
                   const unitOptions = sellableUnits(product);
@@ -397,92 +388,89 @@ export default function CreatePurchase() {
                     unitOptions.find((u) => String(u.id) === String(item.unit_id)) ||
                     baseUnitOfProduct(product);
                   const subtotal = (Number(item.quantity) || 0) * (Number(item.buy_price) || 0);
+
                   return (
-                    <div key={idx} className="border border-outline-variant rounded-lg p-3 space-y-3 relative">
-                      <button
-                        type="button"
-                        onClick={() => removeItem(idx)}
-                        className="absolute top-2 right-2 text-error hover:bg-error-container p-1 rounded-full transition-colors"
-                      >
-                        <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>delete</span>
-                      </button>
-                      <div>
-                        <label className="block text-xs font-medium text-on-surface-variant mb-1">Produk</label>
-                        <select
+                    <div
+                      key={idx}
+                      className="relative rounded-field border border-outline-variant/70 bg-surface-container-low/40 p-3 space-y-3"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-2xs font-medium uppercase tracking-wide text-on-surface-variant">
+                          Item {idx + 1}
+                        </span>
+                        <IconButton
+                          icon="delete"
+                          label={`Hapus item ${idx + 1}`}
+                          size="sm"
+                          tone="danger"
+                          onClick={() => removeItem(idx)}
+                        />
+                      </div>
+
+                      <FormField label="Produk" required>
+                        <Select
                           value={item.product_id}
                           onChange={(e) => updateItem(idx, 'product_id', e.target.value)}
-                          className="w-full border border-outline-variant rounded-lg px-3 py-2 text-sm text-on-surface bg-transparent focus:border-primary focus:ring-1 focus:ring-primary"
                           required
                         >
-                          <option value="">Pilih Produk</option>
+                          <option value="">Pilih produk</option>
                           {productList.map((p) => (
                             <option key={p.id} value={p.id}>{p.name}</option>
                           ))}
-                        </select>
-                      </div>
+                        </Select>
+                      </FormField>
+
                       {unitOptions.length > 1 && (
-                        <div>
-                          <label className="block text-xs font-medium text-on-surface-variant mb-1">
-                            Satuan Beli
-                          </label>
-                          <select
+                        <FormField label="Satuan Beli">
+                          <Select
                             value={item.unit_id === '' ? String(selectedUnit?.id ?? '') : item.unit_id}
                             onChange={(e) => updateItem(idx, 'unit_id', e.target.value)}
-                            className="w-full border border-outline-variant rounded-lg px-3 py-2 text-sm text-on-surface bg-transparent focus:border-primary focus:ring-1 focus:ring-primary"
                           >
                             {unitOptions.map((u) => (
                               <option key={u.id ?? 'base'} value={u.id ?? ''}>
                                 {u.name}
                                 {u.is_base
-                                  ? ' (satuan dasar)'
-                                  : ` (1 ${u.name} = ${u.factor} ${baseUnitOfProduct(product)?.name || ''})`}
+                                  ? ` (${baseUnitOfProduct(product)?.name || 'satuan dasar'})`
+                                  : ` (1 ${u.name} = ${u.factor} ${baseUnitOfProduct(product)?.name || 'satuan dasar'})`}
                               </option>
                             ))}
-                          </select>
-                        </div>
+                          </Select>
+                        </FormField>
                       )}
-                      <div className="flex gap-3">
-                        <div className="w-1/3">
-                          <label className="block text-xs font-medium text-on-surface-variant mb-1">
-                            Qty
-                            {selectedUnit && !selectedUnit.is_base && (
-                              <span className="font-normal"> ({selectedUnit.name})</span>
-                            )}
-                          </label>
-                          <input
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <FormField label={`Qty${selectedUnit && !selectedUnit.is_base ? ` (${selectedUnit.name})` : ''}`}>
+                          <Input
                             type="number"
                             min="1"
                             value={item.quantity}
                             onChange={(e) => updateItem(idx, 'quantity', e.target.value)}
-                            className="w-full border border-outline-variant rounded-lg px-3 py-2 text-sm text-on-surface bg-transparent focus:border-primary focus:ring-1 focus:ring-primary"
                             required
                           />
-                        </div>
-                        <div className="w-2/3">
-                          <label className="block text-xs font-medium text-on-surface-variant mb-1">
-                            Harga per {selectedUnit?.name || 'satuan'}
-                          </label>
-                          <input
+                        </FormField>
+                        <FormField label={`Harga per ${selectedUnit?.name || 'satuan'}`}>
+                          <Input
                             type="number"
                             min="0"
                             value={item.buy_price}
                             onChange={(e) => updateItem(idx, 'buy_price', e.target.value)}
-                            className="w-full border border-outline-variant rounded-lg px-3 py-2 text-sm text-on-surface bg-transparent focus:border-primary focus:ring-1 focus:ring-primary"
                             required
                           />
-                        </div>
+                        </FormField>
                       </div>
+
                       {product && (
-                        <p className="text-[11px] text-on-surface-variant">
+                        <p className="text-2xs text-on-surface-variant">
                           Stok saat ini {availableIn(product, item.unit_id)} {selectedUnit?.name || ''}
                           {factorOf(product, item.unit_id) > 1 && (
                             <> ({product.stock} {baseUnitOfProduct(product)?.name})</>
                           )}
                         </p>
                       )}
-                      <div className="flex justify-between items-center pt-2 border-t border-surface-variant">
+
+                      <div className="flex items-center justify-between border-t border-outline-variant/50 pt-2">
                         <span className="text-xs font-medium text-on-surface-variant">Subtotal</span>
-                        <span className="text-lg font-semibold text-on-surface">{formatCurrency(subtotal)}</span>
+                        <Money value={subtotal} variant="strong" className="text-sm" />
                       </div>
                     </div>
                   );
@@ -490,53 +478,60 @@ export default function CreatePurchase() {
               </div>
             )}
 
-            <button
-              type="button"
-              onClick={addItem}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-primary text-primary text-lg font-semibold hover:bg-surface-container-low transition-colors"
-            >
-              <span className="material-symbols-outlined">add</span> Tambah Item
-            </button>
+            <Button type="button" variant="outline" icon="add" fullWidth onClick={addItem}>
+              Tambah Item
+            </Button>
           </section>
-
-          {/* Section 3: Ringkasan */}
-          <section className="bg-surface-container-lowest p-4 rounded-xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.06)] border border-surface-container-low">
-            <h2 className="text-xl font-semibold text-on-surface mb-4">Ringkasan</h2>
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-on-surface-variant">Total Item</span>
-                <span className="text-lg font-semibold text-on-surface">{form.items.length}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-on-surface-variant">Subtotal</span>
-                <span className="text-lg font-semibold text-on-surface">{formatCurrency(total)}</span>
-              </div>
-              <div className="flex justify-between items-center pt-3 border-t border-outline-variant mt-2">
-                <span className="text-lg font-semibold text-on-surface">Total Pembelian</span>
-                <span className="text-3xl font-bold text-primary">{formatCurrency(total)}</span>
-              </div>
-            </div>
-          </section>
-        </main>
-
-        {/* Sticky Bottom Bar */}
-        <div className="fixed left-0 w-full bg-surface border-t border-outline-variant p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.06)] z-50 flex gap-3 create-bottom-bar">
-          <button
-            type="button"
-            onClick={() => navigate('/pembelian')}
-            className="w-1/3 py-3 rounded-xl border border-outline text-on-surface text-lg font-semibold hover:bg-surface-container-low transition-colors"
-          >
-            Batal
-          </button>
-          <button
-            type="submit"
-            disabled={mutation.isPending}
-            className="w-2/3 py-3 rounded-xl bg-primary text-on-primary text-lg font-semibold hover:bg-primary-container hover:text-on-primary-container transition-colors shadow-sm disabled:opacity-50"
-          >
-            {mutation.isPending ? 'Menyimpan...' : (isEdit ? 'Update Pembelian' : 'Simpan Pembelian')}
-          </button>
         </div>
-      </form>
-    </>
+
+        <aside className="space-y-4 lg:sticky lg:top-4">
+          <section className="rounded-card border border-outline-variant/70 bg-surface-container-lowest p-4">
+            <h2 className="text-sm font-semibold text-on-surface">Ringkasan</h2>
+            <dl className="mt-3 space-y-2 text-sm">
+              <div className="flex items-center justify-between">
+                <dt className="text-on-surface-variant">Total Item</dt>
+                <dd className="font-medium text-on-surface tabular-nums">{form.items.length}</dd>
+              </div>
+              <div className="flex items-center justify-between">
+                <dt className="text-on-surface-variant">Subtotal</dt>
+                <dd className="font-medium text-on-surface tabular-nums">{formatCurrency(total)}</dd>
+              </div>
+              <div className="flex items-center justify-between border-t border-outline-variant/60 pt-3">
+                <dt className="font-semibold text-on-surface">Total Pembelian</dt>
+                <dd className="text-lg font-bold text-primary tabular-nums">{formatCurrency(total)}</dd>
+              </div>
+            </dl>
+          </section>
+
+          <div className="hidden lg:flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              fullWidth
+              onClick={() => navigate('/pembelian')}
+            >
+              Batal
+            </Button>
+            <Button type="submit" fullWidth loading={mutation.isPending}>
+              {isEdit ? 'Update Pembelian' : 'Simpan Pembelian'}
+            </Button>
+          </div>
+        </aside>
+      </div>
+
+      <div className="lg:hidden fixed left-0 w-full bg-surface border-t border-outline-variant/70 p-3 flex gap-2 create-bottom-bar z-40">
+        <Button
+          type="button"
+          variant="outline"
+          fullWidth
+          onClick={() => navigate('/pembelian')}
+        >
+          Batal
+        </Button>
+        <Button type="submit" fullWidth loading={mutation.isPending}>
+          {isEdit ? 'Update' : 'Simpan'}
+        </Button>
+      </div>
+    </form>
   );
 }

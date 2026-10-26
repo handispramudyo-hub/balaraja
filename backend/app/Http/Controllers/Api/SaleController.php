@@ -55,6 +55,12 @@ class SaleController extends Controller
                 ]);
             }
 
+            if (($product->status ?? 'active') !== 'active') {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    "items.{$index}.product_id" => "Produk '{$product->name}' tidak aktif dan tidak dapat dijual.",
+                ]);
+            }
+
             $unit = $unitService->resolveUnit(
                 $product,
                 $item['unit_id'] ?? null,
